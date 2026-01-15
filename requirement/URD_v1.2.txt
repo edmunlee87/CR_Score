@@ -1,0 +1,767 @@
+================================================================================
+USER REQUIREMENT DOCUMENT (URD)
+================================================================================
+
+Project Name  : CR_Score – Enterprise Scorecard Development Platform
+Date          : 2026-01-15
+Version       : 1.2 (Integrated Spark, Compression & Sample Weighting)
+Author        : Edmun (Requester) | Drafted by ChatGPT
+
+================================================================================
+TABLE OF CONTENTS
+================================================================================
+1. Introduction
+2. Vision & Design Principles
+3. System Overview
+4. User Personas & Access Control
+5. End-to-End Functional Requirements
+6. Spark Data Handling & Efficiency Layer
+7. Interfaces (CLI / SDK / API / UI)
+8. Toolset & MCP Interface (Agent-Ready)
+9. Architecture & Scalability
+10. Non-Functional Requirements
+11. Governance, Validation & Auditability
+12. Testing, CI/CD & Release
+13. Assumptions & Constraints
+14. Strategic Recommendations (ChatGPT Opinion)
+15. Appendices
+   A. Repository Structure
+   B. Configuration Schema
+   C. Canonical Run Artifacts
+   D. Spark Compression & Sample Weight Pseudocode
+
+================================================================================
+1. INTRODUCTION
+================================================================================
+
+1.1 Purpose
+-----------
+Define an enterprise-grade, config-driven platform for end-to-end credit
+scorecard development that is:
+
+- Fast (efficient on large datasets)
+- Reproducible (deterministic, auditable)
+- Scalable (Spark-native)
+- Usable by analysts to expert modelers
+- Future-proof (agent/MCP ready)
+
+1.2 Scope
+---------
+IN SCOPE:
+- Application & behavioral scorecards
+- WoE + logistic regression as baseline
+- Reject inference
+- Score scaling & operational spec
+- Spark-based large-scale processing
+- CLI, SDK, API, UI
+- Tool/MCP interface
+
+OUT OF SCOPE (v1.2):
+- Real-time decisioning engine
+- Black-box-only ML without explainability
+
+================================================================================
+2. VISION & DESIGN PRINCIPLES
+================================================================================
+
+P1. Config-First
+----------------
+Every action must be expressible as configuration.
+
+P2. Artifact-First
+------------------
+Every executed step must produce versioned artifacts.
+
+P3. Deterministic by Default
+----------------------------
+Same config + same data snapshot = same result.
+
+P4. Spark Where It Matters
+--------------------------
+Spark is used for:
+- heavy data scans
+- aggregation
+- compression
+- stability analysis
+
+Python is used for:
+- orchestration
+- diagnostics
+- visualization
+- UX responsiveness
+
+P5. Scale Without Losing Statistical Correctness
+------------------------------------------------
+Row-level data is optional once sufficient statistics are available.
+
+================================================================================
+3. SYSTEM OVERVIEW
+================================================================================
+
+CR_Score orchestrates the **full scorecard lifecycle**:
+
+Data → EDA → Feature Engineering → Binning → WoE Encoding →  
+Reject Inference → Modeling → Calibration → Scaling → Reporting → Export
+
+Key idea:
+**Most scorecard steps only need counts and event sums, not raw rows.**
+
+================================================================================
+4. USER PERSONAS & ACCESS CONTROL
+================================================================================
+
+Roles:
+- Viewer
+- Analyst
+- Modeler
+- Validator
+- Admin
+
+Key Controls:
+- Manual bin overrides require explicit permission
+- Validator mode enforces immutability
+- All overrides logged with reason + diff
+
+================================================================================
+5. END-TO-END FUNCTIONAL REQUIREMENTS
+================================================================================
+
+(Sections 5.1–5.16 unchanged from v1.1 and assumed integrated here for brevity.)
+
+Key emphasis:
+- Binning objects are first-class
+- Scorecard spec is exportable as a single JSON
+- Every decision has lineage
+
+================================================================================
+6. SPARK DATA HANDLING & EFFICIENCY LAYER
+================================================================================
+
+6.1 Motivation
+--------------
+Scorecard datasets are often:
+- very large
+- highly redundant
+- repeatedly scanned for similar statistics
+
+Goal:
+Reduce data volume by **orders of magnitude** without changing results.
+
+6.2 Execution Profiles
+----------------------
+Supported engines:
+- python_local
+- spark_local
+- spark_cluster
+
+Configured via:
+execution.engine
+
+6.3 Data Optimization Pipeline
+------------------------------
+
+STEP 1: Column Pruning
+- Keep only:
+  - target
+  - features
+  - segmentation keys
+  - time keys
+- Drop everything else early
+
+STEP 2: Type Optimization
+- Cast numerics to smallest safe type
+- Dictionary encode categoricals
+- Produce safe_cast_report
+
+STEP 3: Missing Normalization
+- Normalize sentinel values
+- Persist missing_value_contract.json
+
+STEP 4: Cardinality Control
+- Rare-level grouping
+- Hard caps on category explosion
+- cardinality_report.csv
+
+6.4 Compression via Sample Weighting (CORE FEATURE)
+---------------------------------------------------
+
+Key idea:
+Replace N identical rows with **1 row + weight**.
+
+Supported Modes:
+
+MODE A: Post-Binning Exact Compression (Default)
+- After bins are assigned
+- Group by bin IDs and segments
+- EXACT statistics preserved
+
+MODE B: EDA Sufficient Statistics
+- Histograms / freq tables
+- Used only for EDA
+
+MODE C: Hybrid Top-K + Tail
+- Top-K exact
+- Tail collapsed to OTHER
+
+6.5 Weight Semantics
+-------------------
+sample_weight = number of rows represented  
+event_weight  = number of events represented  
+
+All downstream steps must respect weights.
+
+6.6 Correctness Guarantees
+-------------------------
+- Total observations preserved
+- Total events preserved
+- Event rates preserved
+- Logistic likelihood preserved under weights
+
+6.7 Spark Requirements
+---------------------
+- Skew detection & salting
+- Partition-aware aggregation
+- Persist binned keys
+- Checkpoint long DAGs
+
+================================================================================
+7. INTERFACES
+================================================================================
+
+CLI:
+----
+CR_Score run --config config.yml
+CR_Score step compress --run-id X
+CR_Score compare --run-id A --run-id B
+
+SDK:
+----
+Project.load()
+Run.execute()
+Artifacts.get()
+
+API:
+----
+POST /runs
+GET /artifacts
+POST /compare
+
+UI:
+---
+Wizard + Advanced config + Binning Studio + Run Compare
+
+================================================================================
+8. TOOLSET / MCP INTERFACE
+================================================================================
+
+Each step exposed as deterministic tool:
+
+- validate_data
+- compress_data
+- run_eda
+- bin_variables
+- train_scorecard
+- scale_score
+- export_spec
+
+Tools:
+- strict JSON schema
+- versioned
+- permission-aware
+- auditable
+
+================================================================================
+9. ARCHITECTURE & SCALABILITY
+================================================================================
+
+- Stateless orchestration
+- Pluggable storage (local / S3)
+- Metadata store (SQLite → Postgres)
+- Spark cluster optional but first-class
+- Cache by (data_hash, config_hash)
+
+================================================================================
+10. NON-FUNCTIONAL REQUIREMENTS
+================================================================================
+
+Performance:
+- Handle 100M+ rows via Spark
+- Compression ratio target: >20x
+
+Reliability:
+- Step retries
+- Checkpointing
+
+Security:
+- RBAC
+- Masking
+
+Reproducibility:
+- Seeds
+- Hashes
+- Snapshots
+
+================================================================================
+11. GOVERNANCE & VALIDATION
+================================================================================
+
+- Model card auto-generated
+- Validator reproduction mode
+- Run comparison pack
+- Locked artifacts
+
+================================================================================
+12. TESTING & CI/CD
+================================================================================
+
+- Unit tests
+- Golden reproducibility tests
+- Spark equivalence tests
+- Tool contract tests
+
+================================================================================
+13. ASSUMPTIONS
+================================================================================
+
+- Regulated environment
+- Interpretability required
+- Mixed skill users
+
+================================================================================
+14. STRATEGIC RECOMMENDATIONS (CHATGPT OPINION)
+================================================================================
+
+- Treat compression as mandatory for scale
+- Keep WoE + logit as golden path
+- Make binning UX excellent
+- Make run comparison effortless
+- Design MCP early
+
+================================================================================
+15. APPENDICES
+================================================================================
+================================================================================
+APPENDIX A – SUGGESTED REPOSITORY & MODULE STRUCTURE
+================================================================================
+
+/CR_Score
+├── core
+│   ├── config
+│   │   ├── schema.py              # Config schema validation
+│   │   ├── defaults.yml           # Global defaults
+│   │   └── templates/             # Project templates
+│   ├── registry
+│   │   ├── run_registry.py        # Run metadata store
+│   │   ├── artifact_index.py      # Artifact catalog
+│   │   └── locks.py               # Validator locks
+│   ├── hashing
+│   │   └── fingerprint.py         # Config + data hashing
+│   ├── logging
+│   │   └── audit_logger.py        # Structured audit logs
+│   └── utils
+│       └── path_utils.py
+│
+├── data
+│   ├── connectors
+│   │   ├── local.py
+│   │   ├── s3.py
+│   │   └── sql.py
+│   ├── contracts
+│   │   ├── schema_contract.py
+│   │   └── missing_value_contract.py
+│   ├── validation
+│   │   ├── schema_check.py
+│   │   ├── dq_checks.py
+│   │   └── leakage_checks.py
+│   └── optimization
+│       ├── column_pruning.py
+│       ├── type_optimization.py
+│       └── cardinality_control.py
+│
+├── spark
+│   ├── session.py                 # Spark session factory
+│   ├── optimization
+│   │   ├── skew_detection.py
+│   │   ├── salting.py
+│   │   └── persistence.py
+│   ├── compression
+│   │   ├── post_binning_exact.py
+│   │   ├── eda_sufficient_stats.py
+│   │   └── hybrid_topk_tail.py
+│   └── metrics
+│       ├── psi.py
+│       └── event_rate.py
+│
+├── eda
+│   ├── univariate.py
+│   ├── bivariate.py
+│   ├── segmentation.py
+│   ├── drift.py
+│   └── eda_report.py
+│
+├── features
+│   ├── recipes.py
+│   ├── transformations.py
+│   ├── interactions.py
+│   ├── feature_lineage.py
+│   └── selection_filters.py
+│
+├── binning
+│   ├── fine_classing.py
+│   ├── coarse_classing.py
+│   ├── monotonic_merge.py
+│   ├── constraints.py
+│   ├── overrides.py
+│   └── bin_quality_gates.py
+│
+├── encoding
+│   ├── woe.py
+│   ├── mapping_export.py
+│   └── scoring_transform.py
+│
+├── reject_inference
+│   ├── none.py
+│   ├── parceling.py
+│   ├── reweighting.py
+│   ├── augmentation.py
+│   └── assumption_log.py
+│
+├── model
+│   ├── logistic.py
+│   ├── regularized.py
+│   ├── diagnostics.py
+│   ├── stability.py
+│   └── challenger_interface.py
+│
+├── calibration
+│   ├── intercept.py
+│   ├── curves.py
+│   └── segment_calibration.py
+│
+├── scaling
+│   ├── pdo.py
+│   ├── score_formula.py
+│   ├── points_table.py
+│   └── pd_mapping.py
+│
+├── explainability
+│   ├── reason_codes.py
+│   └── adverse_action.py
+│
+├── monitoring
+│   ├── vintage.py
+│   ├── psi_tracking.py
+│   └── monitoring_pack.py
+│
+├── viz
+│   ├── bin_plots.py
+│   ├── score_plots.py
+│   ├── lift_gains.py
+│   ├── calibration_plot.py
+│   └── vintage_plot.py
+│
+├── reporting
+│   ├── html_report.py
+│   ├── pdf_report.py
+│   └── confluence_safe.py
+│
+├── tools
+│   ├── tool_registry.py
+│   ├── base_tool.py
+│   ├── schemas/
+│   └── permissions.py
+│
+├── api
+│   ├── routes.py
+│   ├── auth.py
+│   └── service.py
+│
+├── ui
+│   ├── wizard
+│   ├── binning_studio
+│   ├── run_compare
+│   └── artifact_explorer
+│
+├── cli
+│   ├── main.py
+│   └── commands.py
+│
+├── templates
+│   ├── beginner/
+│   ├── intermediate/
+│   └── advanced/
+│
+├── tests
+│   ├── unit
+│   ├── integration
+│   ├── spark
+│   └── reproducibility
+│
+└── docs
+    ├── model_cards
+    ├── validation_guides
+    └── user_manual
+================================================================================
+APPENDIX B – CONFIGURATION SCHEMA (COPIABLE SKELETON)
+================================================================================
+
+project:
+  name:
+  owner:
+  template:
+  description:
+  tags:
+
+execution:
+  engine: spark_cluster     # python_local | spark_local | spark_cluster
+  spark:
+    shuffle_partitions: 800
+    persist_level: MEMORY_AND_DISK
+    checkpoint_enabled: true
+    checkpoint_dir:
+    skew_mitigation:
+      enabled: true
+      salting_factor: 8
+
+data:
+  sources:
+  schema_contract:
+  snapshot_ref:
+  primary_key:
+  time_key:
+  segment_keys:
+
+target:
+  definition:
+  horizon_months:
+  cure_logic:
+
+split:
+  method: time_based
+  dev_period:
+  oot_period:
+  val_period:
+
+data_optimization:
+  column_pruning: true
+  type_optimization: true
+  missing_normalization: true
+  high_cardinality:
+    enabled: true
+    rare_level_threshold: 0.001
+    max_levels: 500
+
+compression:
+  enabled: true
+  mode: post_binning_exact
+  trigger:
+    min_rows: 5000000
+  verification:
+    enabled: true
+    tolerance: 0.0
+
+sampling:
+  enabled: false
+  method: stratified
+  strata:
+  max_rows:
+
+eda:
+  segments:
+  drift_metrics: [PSI, CSI]
+
+features:
+  recipes:
+  selection_filters:
+
+binning:
+  fine:
+    method:
+    max_bins:
+  coarse:
+    monotonicity:
+    min_bin_pct:
+  overrides:
+
+reject_inference:
+  method:
+  params:
+
+model:
+  type: logistic
+  regularization:
+  feature_selection:
+
+calibration:
+  enabled: true
+  by_segment: false
+
+scaling:
+  pdo:
+  base_score:
+  base_odds:
+
+reporting:
+  formats: [html]
+  confluence_safe: true
+
+interfaces:
+  cli: true
+  sdk: true
+  api: true
+  ui: true
+
+tools:
+  enabled_tools:
+  permissions:
+================================================================================
+APPENDIX C – CANONICAL RUN ARTIFACT SPECIFICATION
+================================================================================
+
+Run Metadata:
+-------------
+- run_metadata.json
+- config_used.yml
+- data_snapshot_ref.json
+- execution_profile.json
+
+EDA Artifacts:
+--------------
+- eda_summary.json
+- eda_univariate.csv
+- eda_bivariate.csv
+- drift_metrics.csv
+- eda_report.html
+
+Binning Artifacts:
+------------------
+- binning_tables/{variable}.csv
+- binning_constraints.json
+- binning_overrides_log.json
+- woe_mappings/{variable}.json
+- iv_summary.csv
+
+Compression Artifacts:
+----------------------
+- compression_summary.json
+- weight_contract.json
+- skew_report.json
+- equivalence_check_report.json
+
+Model Artifacts:
+----------------
+- model_coefficients.csv
+- model_metrics.json
+- calibration_curves.csv
+- stability_report.json
+
+Scaling Artifacts:
+------------------
+- points_table.csv
+- score_formula.json
+- score_to_pd_map.csv
+- score_band_definition.csv
+
+Explainability:
+---------------
+- reason_code_dictionary.csv
+- adverse_action_templates.json
+
+Monitoring Pack:
+----------------
+- monitoring_schema.json
+- vintage_curves.parquet
+- psi_timeseries.parquet
+
+Final Reports:
+--------------
+- final_report.html
+- final_report.pdf (optional)
+- model_card.md
+
+Operational Export:
+-------------------
+- scoring_spec.json
+================================================================================
+APPENDIX D – SPARK COMPRESSION & SAMPLE WEIGHT PSEUDOCODE
+================================================================================
+
+D1. Post-Binning Exact Compression (DEFAULT)
+--------------------------------------------
+
+Goal:
+Replace row-level data with aggregated rows + weights
+while preserving likelihood and event rates exactly.
+
+Step 1 – Assign Bins
+--------------------
+
+df_binned = (
+    df_raw
+    .withColumn("bin_var1", bin_udf(col("var1")))
+    .withColumn("bin_var2", bin_udf(col("var2")))
+    .withColumn("bin_varN", bin_udf(col("varN")))
+)
+
+Step 2 – Aggregate
+------------------
+
+group_cols = [
+    "bin_var1",
+    "bin_var2",
+    "bin_varN",
+    "product",
+    "channel",
+    "reporting_month"
+]
+
+df_compressed = (
+    df_binned
+    .groupBy(group_cols)
+    .agg(
+        F.count("*").alias("sample_weight"),
+        F.sum("target").alias("event_weight")
+    )
+    .withColumn(
+        "event_rate",
+        F.col("event_weight") / F.col("sample_weight")
+    )
+)
+
+Step 3 – Verification
+---------------------
+
+assert df_raw.count() == df_compressed.agg(
+    F.sum("sample_weight")
+).collect()[0][0]
+
+assert df_raw.agg(
+    F.sum("target")
+).collect()[0][0] == df_compressed.agg(
+    F.sum("event_weight")
+).collect()[0][0]
+
+Step 4 – Weighted Logistic Regression
+------------------------------------
+
+pdf = df_compressed.toPandas()
+
+X = pdf[feature_cols]
+y = pdf["event_rate"]
+w = pdf["sample_weight"]
+
+model = LogisticRegression()
+model.fit(X, y, sample_weight=w)
+
+D2. When NOT to Compress
+-----------------------
+- Raw feature discovery
+- Observation-level explainability before aggregation
+- Deep nonlinear models
+
+D3. Expected Benefits
+---------------------
+- 20x–100x row reduction
+- Faster bin tuning
+- Faster retraining
+- Lower memory footprint

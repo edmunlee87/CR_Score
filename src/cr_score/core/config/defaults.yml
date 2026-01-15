@@ -1,0 +1,95 @@
+# CR_Score Default Configuration
+# Version: 1.2
+# All values can be overridden via config file or environment variables (CR_SCORE_*)
+
+execution:
+  engine: python_local
+  spark:
+    shuffle_partitions: 800
+    persist_level: MEMORY_AND_DISK
+    checkpoint_enabled: true
+    checkpoint_dir: null
+    skew_mitigation:
+      enabled: true
+      salting_factor: 8
+
+split:
+  method: time_based
+  train_ratio: 0.7
+  random_seed: 42
+
+data_optimization:
+  column_pruning: true
+  type_optimization: true
+  missing_normalization: true
+  high_cardinality:
+    enabled: true
+    rare_level_threshold: 0.001
+    max_levels: 500
+
+compression:
+  enabled: true
+  mode: post_binning_exact
+  trigger:
+    min_rows: 5000000
+  verification:
+    enabled: true
+    tolerance: 0.0
+
+sampling:
+  enabled: false
+  method: stratified
+  max_rows: null
+
+eda:
+  segments: []
+  drift_metrics:
+    - PSI
+    - CSI
+
+features:
+  recipes: []
+  selection_filters: {}
+
+binning:
+  fine:
+    method: quantile
+    max_bins: 20
+  coarse:
+    monotonicity: true
+    min_bin_pct: 0.05
+  overrides: {}
+
+reject_inference:
+  method: none
+  params: {}
+
+model:
+  type: logistic
+  regularization: null
+  feature_selection: {}
+  random_seed: 42
+
+calibration:
+  enabled: true
+  by_segment: false
+
+scaling:
+  pdo: 20
+  base_score: 600
+  base_odds: 50.0
+
+reporting:
+  formats:
+    - html
+  confluence_safe: true
+
+interfaces:
+  cli: true
+  sdk: true
+  api: true
+  ui: true
+
+tools:
+  enabled_tools: []
+  permissions: {}

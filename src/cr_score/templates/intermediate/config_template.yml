@@ -1,0 +1,137 @@
+# CR_Score Configuration Template - Intermediate Level
+# Version: 1.2
+# This template provides a balanced starting point for scorecard development
+
+project:
+  name: "my_scorecard_project"
+  owner: "your_name"
+  template: "intermediate"
+  description: "Credit scorecard development project"
+  tags:
+    - "application_scorecard"
+    - "retail"
+
+execution:
+  engine: "spark_local"  # Options: python_local, spark_local, spark_cluster
+  spark:
+    shuffle_partitions: 800
+    persist_level: "MEMORY_AND_DISK"
+    checkpoint_enabled: true
+    checkpoint_dir: "./checkpoints"
+    skew_mitigation:
+      enabled: true
+      salting_factor: 8
+
+data:
+  sources:
+    - path: "data/train.parquet"
+      format: "parquet"
+      options: {}
+  schema_contract: null
+  snapshot_ref: null
+  primary_key: "customer_id"
+  time_key: "application_date"
+  segment_keys:
+    - "product"
+    - "channel"
+
+target:
+  definition: "default_flag"
+  horizon_months: 12
+  cure_logic: null
+
+split:
+  method: "time_based"
+  dev_period: "2024-01-01:2024-06-30"
+  oot_period: "2024-07-01:2024-09-30"
+  val_period: "2024-10-01:2024-12-31"
+  train_ratio: 0.7
+  random_seed: 42
+
+data_optimization:
+  column_pruning: true
+  type_optimization: true
+  missing_normalization: true
+  high_cardinality:
+    enabled: true
+    rare_level_threshold: 0.001
+    max_levels: 500
+
+compression:
+  enabled: true
+  mode: "post_binning_exact"
+  trigger:
+    min_rows: 5000000
+  verification:
+    enabled: true
+    tolerance: 0.0
+
+sampling:
+  enabled: false
+  method: "stratified"
+  strata: []
+  max_rows: null
+
+eda:
+  segments:
+    - "product"
+    - "channel"
+  drift_metrics:
+    - "PSI"
+    - "CSI"
+
+features:
+  recipes: []
+  selection_filters:
+    min_iv: 0.02
+    max_missing: 0.5
+    max_correlation: 0.8
+
+binning:
+  fine:
+    method: "quantile"
+    max_bins: 20
+  coarse:
+    monotonicity: true
+    min_bin_pct: 0.05
+  overrides: {}
+
+reject_inference:
+  method: "none"
+  params: {}
+
+model:
+  type: "logistic"
+  regularization: null
+  feature_selection:
+    method: "stepwise"
+    direction: "backward"
+  random_seed: 42
+
+calibration:
+  enabled: true
+  by_segment: false
+
+scaling:
+  pdo: 20
+  base_score: 600
+  base_odds: 50.0
+
+reporting:
+  formats:
+    - "html"
+  confluence_safe: true
+
+interfaces:
+  cli: true
+  sdk: true
+  api: true
+  ui: true
+
+tools:
+  enabled_tools:
+    - "validate_data"
+    - "run_eda"
+    - "bin_variables"
+    - "train_scorecard"
+  permissions: {}

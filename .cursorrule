@@ -13,3 +13,6 @@
 # - Structured audit logging for config changes and overrides.
 # - No hardcoded values; use config with defaults.
 # - Prefer apply_patch for single-file edits.
+# - Do not create more than 5 markdown files.
+# - Create Sphinx documentation once the package is ready; keep docstrings comprehensive in code.
+# - Do not use emoji or any icons in code; maintain professional tone.
