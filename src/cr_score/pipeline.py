@@ -13,6 +13,7 @@ from cr_score.binning.optbinning_wrapper import AutoBinner
 from cr_score.model import LogisticScorecard
 from cr_score.calibration import InterceptCalibrator
 from cr_score.scaling import PDOScaler
+from cr_score.features.selection import ForwardSelector, BackwardSelector, StepwiseSelector
 from cr_score.core.logging import get_audit_logger
 
 
@@ -49,6 +50,8 @@ class ScorecardPipeline:
         base_odds: float = 50.0,
         target_bad_rate: Optional[float] = None,
         calibrate: bool = True,
+        feature_selection: Optional[str] = None,
+        max_features: Optional[int] = None,
         random_state: int = 42,
     ) -> None:
         """
@@ -62,10 +65,16 @@ class ScorecardPipeline:
             base_odds: Odds at base score
             target_bad_rate: Target bad rate for calibration (None = use observed)
             calibrate: Whether to calibrate intercept
+            feature_selection: Selection method (None, "forward", "backward", "stepwise")
+            max_features: Maximum features to select (None = no limit)
             random_state: Random seed
 
         Example:
-            >>> pipeline = ScorecardPipeline(max_n_bins=5, pdo=20, base_score=600)
+            >>> pipeline = ScorecardPipeline(
+            ...     max_n_bins=5,
+            ...     feature_selection="stepwise",
+            ...     max_features=10
+            ... )
         """
         self.max_n_bins = max_n_bins
         self.min_iv = min_iv
@@ -74,11 +83,14 @@ class ScorecardPipeline:
         self.base_odds = base_odds
         self.target_bad_rate = target_bad_rate
         self.calibrate = calibrate
+        self.feature_selection = feature_selection
+        self.max_features = max_features
         self.random_state = random_state
         self.logger = get_audit_logger()
 
         # Components
         self.auto_binner_: Optional[AutoBinner] = None
+        self.feature_selector_: Optional[Any] = None
         self.model_: Optional[LogisticScorecard] = None
         self.calibrator_: Optional[InterceptCalibrator] = None
         self.scaler_: Optional[PDOScaler] = None
@@ -86,6 +98,7 @@ class ScorecardPipeline:
         # State
         self.target_col_: Optional[str] = None
         self.feature_cols_: Optional[List[str]] = None
+        self.selected_features_: Optional[List[str]] = None
         self.is_fitted_: bool = False
 
     def fit(
@@ -144,11 +157,63 @@ class ScorecardPipeline:
         if len(selected_features) == 0:
             raise ValueError("No features selected. Try lowering min_iv parameter.")
 
-        # Step 2: Model training
-        self.logger.info(f"\n[2/5] Training logistic regression with {len(selected_features)} features...")
+        # Step 2: Feature Selection (optional)
+        woe_features = [f"{f}_woe" for f in selected_features]
+
+        if self.feature_selection and len(selected_features) > 5:
+            self.logger.info(f"\n[2/5] Running {self.feature_selection} feature selection...")
+
+            # Create selector
+            if self.feature_selection == "forward":
+                self.feature_selector_ = ForwardSelector(
+                    estimator=LogisticScorecard(random_state=self.random_state),
+                    max_features=self.max_features,
+                    scoring="roc_auc",
+                    cv=3,
+                    use_mlflow=False,
+                )
+            elif self.feature_selection == "backward":
+                self.feature_selector_ = BackwardSelector(
+                    estimator=LogisticScorecard(random_state=self.random_state),
+                    min_features=3,
+                    scoring="roc_auc",
+                    cv=3,
+                    use_mlflow=False,
+                )
+            elif self.feature_selection == "stepwise":
+                self.feature_selector_ = StepwiseSelector(
+                    estimator=LogisticScorecard(random_state=self.random_state),
+                    max_features=self.max_features,
+                    scoring="roc_auc",
+                    cv=3,
+                    use_mlflow=False,
+                )
+            else:
+                self.logger.warning(f"Unknown selection method: {self.feature_selection}, skipping")
+                self.feature_selector_ = None
+
+            if self.feature_selector_:
+                self.feature_selector_.fit(df_woe[woe_features], df[target_col])
+                woe_features = self.feature_selector_.get_selected_features()
+
+                # Map back to original features
+                self.selected_features_ = [f.replace("_woe", "") for f in woe_features]
+
+                self.logger.info(
+                    f"{self.feature_selection.capitalize()} selection: "
+                    f"{len(selected_features)} → {len(self.selected_features_)} features"
+                )
+            else:
+                self.selected_features_ = selected_features
+        else:
+            self.logger.info("\n[2/5] Skipping feature selection (not configured or too few features)")
+            self.selected_features_ = selected_features
+
+        # Step 3: Model training
+        self.logger.info(f"\n[3/5] Training logistic regression with {len(self.selected_features_)} features...")
         self.model_ = LogisticScorecard(random_state=self.random_state)
 
-        X_woe = df_woe[[f"{f}_woe" for f in selected_features]]
+        X_woe = df_woe[woe_features]
         y = df[target_col]
 
         self.model_.fit(X_woe, y, sample_weight=sample_weight)
@@ -161,9 +226,9 @@ class ScorecardPipeline:
         self.logger.info(f"Training Gini: {train_metrics['gini']:.3f}")
         self.logger.info(f"Training KS: {train_metrics['ks']:.3f}")
 
-        # Step 3: Calibration
+        # Step 4: Calibration
         if self.calibrate:
-            self.logger.info("\n[3/5] Calibrating intercept...")
+            self.logger.info("\n[4/5] Calibrating intercept...")
             self.calibrator_ = InterceptCalibrator(target_bad_rate=self.target_bad_rate)
             self.calibrator_.fit(train_proba, y)
 
@@ -171,11 +236,11 @@ class ScorecardPipeline:
             self.logger.info(f"Target bad rate: {self.calibrator_.target_bad_rate:.2%}")
             self.logger.info(f"Achieved bad rate: {train_proba_calibrated.mean():.2%}")
         else:
-            self.logger.info("\n[3/5] Skipping calibration (calibrate=False)")
+            self.logger.info("\n[4/5] Skipping calibration (calibrate=False)")
             train_proba_calibrated = train_proba
 
-        # Step 4: Scaling
-        self.logger.info("\n[4/5] Scaling to credit scores...")
+        # Step 5: Scaling
+        self.logger.info("\n[5/5] Scaling to credit scores...")
         self.scaler_ = PDOScaler(
             pdo=self.pdo,
             base_score=self.base_score,
@@ -187,8 +252,8 @@ class ScorecardPipeline:
         self.logger.info(f"Score range: {train_scores.min():.0f} - {train_scores.max():.0f}")
         self.logger.info(f"Mean score: {train_scores.mean():.0f}")
 
-        # Step 5: Done
-        self.logger.info("\n[5/5] Pipeline fitted successfully!")
+        # Done
+        self.logger.info("\n✓ Pipeline fitted successfully!")
         self.logger.info("=" * 80)
 
         self.is_fitted_ = True
@@ -215,8 +280,9 @@ class ScorecardPipeline:
         # Transform to WoE
         df_woe = self.auto_binner_.transform_woe(df)
 
-        selected_features = self.auto_binner_.get_selected_features()
-        X_woe = df_woe[[f"{f}_woe" for f in selected_features]]
+        # Use selected features (from feature selection or auto-binning)
+        features_to_use = self.selected_features_ if self.selected_features_ else self.auto_binner_.get_selected_features()
+        X_woe = df_woe[[f"{f}_woe" for f in features_to_use]]
 
         # Predict probabilities
         probas = self.model_.predict_proba(X_woe)[:, 1]
@@ -250,8 +316,9 @@ class ScorecardPipeline:
         # Transform to WoE
         df_woe = self.auto_binner_.transform_woe(df)
 
-        selected_features = self.auto_binner_.get_selected_features()
-        X_woe = df_woe[[f"{f}_woe" for f in selected_features]]
+        # Use selected features (from feature selection or auto-binning)
+        features_to_use = self.selected_features_ if self.selected_features_ else self.auto_binner_.get_selected_features()
+        X_woe = df_woe[[f"{f}_woe" for f in features_to_use]]
 
         # Predict probabilities
         probas = self.model_.predict_proba(X_woe)[:, 1]
@@ -318,12 +385,16 @@ class ScorecardPipeline:
         if not self.is_fitted_:
             raise ValueError("Pipeline not fitted")
 
-        selected_features = self.auto_binner_.get_selected_features()
+        features_to_use = self.selected_features_ if self.selected_features_ else self.auto_binner_.get_selected_features()
         iv_summary = self.auto_binner_.get_iv_summary()
 
-        return {
-            "n_features": len(selected_features),
-            "selected_features": selected_features,
+        # Filter IV summary to selected features only
+        if self.selected_features_:
+            iv_summary = iv_summary[iv_summary["feature"].isin(self.selected_features_)]
+
+        summary = {
+            "n_features": len(features_to_use),
+            "selected_features": features_to_use,
             "iv_summary": iv_summary.to_dict("records"),
             "model_coefficients": self.model_.get_coefficients().to_dict("records"),
             "pdo_params": {
@@ -333,6 +404,13 @@ class ScorecardPipeline:
             },
             "calibrated": self.calibrate,
         }
+
+        if self.feature_selection:
+            summary["feature_selection_method"] = self.feature_selection
+            summary["features_before_selection"] = len(self.auto_binner_.get_selected_features())
+            summary["features_after_selection"] = len(self.selected_features_) if self.selected_features_ else 0
+
+        return summary
 
     def export_scorecard(self, output_path: str) -> None:
         """
