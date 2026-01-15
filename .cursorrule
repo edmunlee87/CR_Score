@@ -1,0 +1,15 @@
+# CR_Score Cursor Rules
+#
+# Primary references:
+# - requirement/URD_v1.2.txt
+# - docs/rules/AGENT_RULES.md
+# - docs/rules/CODING_STANDARDS.md
+# - docs/rules/VALIDATION_GATES.md
+#
+# Expectations:
+# - Config-first, artifact-first, deterministic-by-default.
+# - Spark for heavy scans/aggregations/compression; Python for orchestration/UX.
+# - Type hints on all public functions; Google-style docstrings.
+# - Structured audit logging for config changes and overrides.
+# - No hardcoded values; use config with defaults.
+# - Prefer apply_patch for single-file edits.
