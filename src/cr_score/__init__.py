@@ -12,11 +12,10 @@ Key Features:
     - Enterprise-grade audit logging and reproducibility
 
 Example:
-    >>> from cr_score import Project, Run
-    >>> project = Project.load("config.yml")
-    >>> run = project.create_run()
-    >>> run.execute()
-    >>> artifacts = run.get_artifacts()
+    >>> from cr_score import ScorecardPipeline
+    >>> pipeline = ScorecardPipeline()
+    >>> results = pipeline.fit(df_train, target_col="default")
+    >>> scores = pipeline.predict(df_test)
 """
 
 __version__ = "1.2.0"
@@ -25,6 +24,7 @@ __author__ = "Edmun Lee"
 from cr_score.core.config.schema import Config
 from cr_score.core.registry.run_registry import RunRegistry
 from cr_score.core.exceptions import CR_ScoreException
+from cr_score.pipeline import ScorecardPipeline
 
 __all__ = [
     "__version__",
@@ -32,4 +32,5 @@ __all__ = [
     "Config",
     "RunRegistry",
     "CR_ScoreException",
+    "ScorecardPipeline",
 ]

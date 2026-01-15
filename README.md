@@ -65,41 +65,71 @@ cr-score list-runs --limit 10
 cr-score compare --run-id-a run_123 --run-id-b run_456
 ```
 
-**Python SDK (Complete Workflow):**
+**Python SDK - Simple (3 Lines!):**
 
 ```python
-# See examples/complete_scorecard_workflow.py for full example
+from cr_score import ScorecardPipeline
 
-from cr_score.binning import FineClasser, CoarseClasser
-from cr_score.encoding import WoEEncoder
+# That's it - 3 lines for a complete production scorecard!
+pipeline = ScorecardPipeline()
+pipeline.fit(df_train, target_col="default")
+scores = pipeline.predict(df_test)
+```
+
+**Python SDK - With Configuration:**
+
+```python
+from cr_score import ScorecardPipeline
+
+# Configure your scorecard
+pipeline = ScorecardPipeline(
+    max_n_bins=5,          # Max 5 bins per feature
+    min_iv=0.02,           # Minimum IV to include features
+    pdo=20,                # Every 20 points, odds double
+    base_score=600,        # Score 600 = 2% default rate
+    target_bad_rate=0.05   # Calibrate to 5% bad rate
+)
+
+# Fit and predict
+pipeline.fit(df_train, target_col="default")
+scores = pipeline.predict(df_test)
+
+# Evaluate
+metrics = pipeline.evaluate(df_test)
+print(f"AUC: {metrics['auc']:.3f}")
+
+# Export for production
+pipeline.export_scorecard("scorecard_spec.json")
+```
+
+**Python SDK - Detailed Control:**
+
+```python
+# For advanced users who want full control
+from cr_score.binning import AutoBinner
 from cr_score.model import LogisticScorecard
 from cr_score.scaling import PDOScaler
 
-# 1. Binning
-classer = FineClasser(method="quantile", max_bins=10)
-classer.fit(df["age"], df["target"])
-df["age_bin"] = classer.transform(df["age"])
+# Auto-binning with optimal algorithms (optbinning package)
+auto_binner = AutoBinner(max_n_bins=5, min_iv=0.02)
+df_binned, df_woe = auto_binner.fit_transform(df, target_col="default")
 
-# 2. WoE Encoding
-encoder = WoEEncoder()
-encoder.fit(df["age_bin"], df["target"])
-df["age_woe"] = encoder.transform(df["age_bin"])
-print(f"IV: {encoder.get_iv():.3f}")
-
-# 3. Modeling
+# Model
 model = LogisticScorecard()
-model.fit(X_woe, y, sample_weight=weights)
-predictions = model.predict_proba(X_test_woe)[:, 1]
+model.fit(df_woe, y)
 
-# 4. Scaling
+# Scale
 scaler = PDOScaler(pdo=20, base_score=600, base_odds=50)
 scores = scaler.transform(predictions)
-print(f"Mean score: {scores.mean():.0f}")
 ```
 
-Run the complete example:
+**Run Examples:**
 
 ```bash
+# Simple 3-line example
+python examples/simple_3_line_scorecard.py
+
+# Complete detailed workflow
 python examples/complete_scorecard_workflow.py
 ```
 
@@ -163,7 +193,7 @@ CR_Score/
 
 ## Current Status
 
-### ✅ Completed (v0.2.0-beta) - 67% Complete
+### ✅ Completed (v0.3.0-beta) - 70% Complete
 
 **Core Infrastructure** (100% Complete)
 - ✅ Config system with Pydantic validation (all URD schemas)
@@ -210,6 +240,13 @@ CR_Score/
 - ✅ PDO (Points-Double-Odds) transformation
 - ✅ Score band generation
 - ✅ Bidirectional score/probability conversion
+
+**Simplified Interface** (100% Complete) 🆕
+- ✅ **ScorecardPipeline** - 3-line scorecard development
+- ✅ **AutoBinner** - Automatic optimal binning with optbinning package
+- ✅ **OptBinningWrapper** - Integration with mathematical optimization
+- ✅ Automatic feature selection based on IV
+- ✅ One-line scorecard export to JSON
 
 ### 🚧 In Progress (33% Remaining)
 
