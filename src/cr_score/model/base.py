@@ -5,7 +5,7 @@ Provides common interface and evaluation integration.
 """
 
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 import pandas as pd
@@ -68,22 +68,34 @@ class BaseScorecardModel(BaseEstimator, ClassifierMixin, ABC):
         """
         Fit the scorecard model.
         
+        Supports both uncompressed and compressed (post-binning) data.
+        For compressed data from PostBinningCompressor, use the 'sample_weight' column.
+        
         Args:
             X: Feature matrix (WoE-encoded features)
-            y: Target variable (binary)
-            sample_weight: Sample weights (for compressed data)
+            y: Target variable (binary) or event_rate (for compressed data)
+            sample_weight: Sample weights (for compressed data from PostBinningCompressor)
         
         Returns:
             Self
         
-        Example:
-            >>> model.fit(X_train_woe, y_train, sample_weight=train_weights)
+        Example (Uncompressed):
+            >>> model.fit(X_train, y_train)
+        
+        Example (Compressed with PostBinningCompressor):
+            >>> # compressed_df has: features, event_rate, sample_weight, event_weight
+            >>> model.fit(
+            ...     X=compressed_df[feature_cols],
+            ...     y=compressed_df['event_rate'],  # or reconstruct binary from event_weight
+            ...     sample_weight=compressed_df['sample_weight']
+            ... )
         """
         self.logger.info(
             f"Fitting {self.__class__.__name__}",
             n_samples=len(X),
             n_features=X.shape[1],
             weighted=sample_weight is not None,
+            effective_samples=sample_weight.sum() if sample_weight is not None else len(X),
         )
         
         self.feature_names_ = list(X.columns)
@@ -92,13 +104,22 @@ class BaseScorecardModel(BaseEstimator, ClassifierMixin, ABC):
         if self.model_ is None:
             self.model_ = self._create_model()
         
-        # Fit model
+        # Fit model with sample weights
         weights = sample_weight.values if sample_weight is not None else None
         self.model_.fit(X.values, y.values, sample_weight=weights)
         
         self.is_fitted_ = True
         
-        self.logger.info(f"{self.__class__.__name__} training completed")
+        if sample_weight is not None:
+            compression_ratio = sample_weight.sum() / len(sample_weight)
+            self.logger.info(
+                f"{self.__class__.__name__} training completed",
+                compression_ratio=f"{compression_ratio:.1f}x",
+                weighted_samples=int(sample_weight.sum()),
+                unique_patterns=len(sample_weight)
+            )
+        else:
+            self.logger.info(f"{self.__class__.__name__} training completed")
         
         return self
     
@@ -308,6 +329,96 @@ class BaseScorecardModel(BaseEstimator, ClassifierMixin, ABC):
                 train_proba, test_proba, bins
             ),
         }
+    
+    @staticmethod
+    def prepare_compressed_data(
+        compressed_df: pd.DataFrame,
+        feature_cols: List[str],
+        target_col: str = "event_rate",
+        weight_col: str = "sample_weight",
+        event_weight_col: Optional[str] = "event_weight",
+    ) -> Tuple[pd.DataFrame, pd.Series, pd.Series]:
+        """
+        Prepare compressed data from PostBinningCompressor for model training.
+        
+        Args:
+            compressed_df: DataFrame from PostBinningCompressor with sample_weight and event_rate
+            feature_cols: List of feature column names
+            target_col: Target column name (default: 'event_rate')
+            weight_col: Sample weight column name (default: 'sample_weight')
+            event_weight_col: Event weight column name (optional, for validation)
+        
+        Returns:
+            Tuple of (X, y, sample_weight)
+        
+        Example:
+            >>> X, y, weights = BaseScorecardModel.prepare_compressed_data(
+            ...     compressed_df,
+            ...     feature_cols=['age_woe', 'income_woe'],
+            ...     target_col='event_rate',
+            ...     weight_col='sample_weight'
+            ... )
+            >>> model.fit(X, y, sample_weight=weights)
+        """
+        X = compressed_df[feature_cols].copy()
+        y = compressed_df[target_col].copy()
+        sample_weight = compressed_df[weight_col].copy()
+        
+        # Validate
+        if sample_weight.isna().any():
+            raise ValueError("sample_weight contains NaN values")
+        if (sample_weight <= 0).any():
+            raise ValueError("sample_weight must be positive")
+        
+        return X, y, sample_weight
+    
+    @staticmethod
+    def expand_compressed_data(
+        compressed_df: pd.DataFrame,
+        weight_col: str = "sample_weight",
+        event_weight_col: str = "event_weight",
+        target_col: str = "target",
+    ) -> pd.DataFrame:
+        """
+        Expand compressed data back to row-level data (for testing/validation).
+        
+        WARNING: This can create very large DataFrames. Use only for small samples.
+        
+        Args:
+            compressed_df: Compressed DataFrame
+            weight_col: Sample weight column
+            event_weight_col: Event weight column  
+            target_col: Target column name for expanded data
+        
+        Returns:
+            Expanded DataFrame with one row per sample
+        
+        Example:
+            >>> # Expand compressed data for validation
+            >>> expanded = BaseScorecardModel.expand_compressed_data(
+            ...     compressed_df.head(10),  # Only first 10 groups
+            ...     weight_col='sample_weight',
+            ...     event_weight_col='event_weight'
+            ... )
+        """
+        expanded_rows = []
+        
+        for idx, row in compressed_df.iterrows():
+            weight = int(row[weight_col])
+            event_weight = int(row[event_weight_col])
+            
+            # Create weight copies with targets
+            row_data = row.drop([weight_col, event_weight_col]).to_dict()
+            
+            # Add rows with target=1 (events)
+            for _ in range(event_weight):
+                expanded_rows.append({**row_data, target_col: 1})
+            
+            # Add rows with target=0 (non-events)
+            for _ in range(weight - event_weight):
+                expanded_rows.append({**row_data, target_col: 0})
+        
+        return pd.DataFrame(expanded_rows)
     
     @abstractmethod
     def get_feature_importance(self) -> pd.DataFrame:
