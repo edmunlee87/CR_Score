@@ -25,8 +25,11 @@ Key Features
 - **Model-Agnostic Feature Selection**: Forward, backward, stepwise, exhaustive with MLflow tracking
 - **Automated Binning**: OptBinning integration for optimal WoE transformation
 - **Simplified 3-Line Interface**: Build complete scorecards with minimal code
+- **Production Monitoring & Observability**: Performance tracking, drift detection, alerting
+- **SHAP Explainability**: Model explanations and regulatory-compliant reason codes
 - **Interactive Visualizations**: Plotly-based charts for binning, scores, performance
 - **HTML Report Generation**: Professional reports with embedded visualizations
+- **Observability Dashboards**: Real-time production monitoring dashboards
 - **MCP Tools**: Agent-ready workflows for AI integration
 - **Enterprise Audit Trails**: Structured logging for compliance
 
@@ -94,8 +97,11 @@ Documentation Structure
    api/calibration
    api/scaling
    api/pipeline
+   api/explainability
+   api/monitoring
    api/viz
    api/reporting
+   api/templates
    api/tools
 
 .. toctree::

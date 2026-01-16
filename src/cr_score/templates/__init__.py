@@ -8,6 +8,7 @@ Provides ready-to-use templates for different complexity levels:
 """
 
 from pathlib import Path
+from typing import Dict, List, Optional
 
 TEMPLATE_DIR = Path(__file__).parent
 
@@ -46,9 +47,6 @@ def list_templates(level: Optional[str] = None) -> Dict[str, List[str]]:
     Returns:
         Dictionary of templates by level
     """
-    import os
-    from typing import Dict, List, Optional
-    
     templates = {}
     
     levels = [level] if level else ['beginner', 'intermediate', 'advanced']
