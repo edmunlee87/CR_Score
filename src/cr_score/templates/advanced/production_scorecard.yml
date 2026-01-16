@@ -1,0 +1,221 @@
+# CR_Score Advanced Template
+# Enterprise-grade scorecard with monitoring and observability
+
+project:
+  name: "production_scorecard"
+  description: "Enterprise production credit scorecard with full monitoring"
+  version: "2.0.0"
+  author: "ML Engineering Team"
+  tags: ["production", "monitored", "compliant"]
+
+execution:
+  random_seed: 42
+  artifacts_path: "./artifacts"
+  enable_audit_logging: true
+  enable_versioning: true
+  enable_hashing: true
+
+data:
+  train_path: "data/train.csv"
+  test_path: "data/test.csv"
+  validation_path: "data/validation.csv"  # Optional
+  target_column: "default"
+  id_column: "application_id"
+  sample_weight_column: null  # If using compressed data
+  
+target:
+  positive_label: 1
+  class_weight: "balanced"  # Handle imbalanced data
+
+split:
+  method: "stratified"
+  test_size: 0.3
+  validation_size: 0.1
+  random_state: 42
+
+data_optimization:
+  column_pruning:
+    enabled: true
+    drop_high_missing_pct: 0.50
+    drop_low_variance: true
+    keep_columns: []  # Force keep these columns
+  type_optimization:
+    enabled: true
+    downcast_numerics: true
+    categorical_encoding: "auto"
+  missing_normalization:
+    strategy: "median"  # mean, median, mode, constant
+    constant_value: -999
+
+compression:
+  post_binning_exact:
+    enabled: false  # Enable for very large datasets
+    use_spark: false
+
+sampling:
+  enabled: false
+  method: "stratified"
+  sample_size: 100000
+
+eda:
+  univariate:
+    enabled: true
+    numeric_stats: true
+    categorical_distribution: true
+  bivariate:
+    enabled: true
+    methods: ["correlation", "chi_square", "cramers_v", "t_test"]
+    correlation_threshold: 0.9  # Flag high correlation
+  drift_detection:
+    enabled: true
+    psi_threshold: 0.1
+    ks_threshold: 0.05
+
+features:
+  selection:
+    enabled: true
+    method: "stepwise"
+    max_features: 15
+    min_features: 5
+    scoring: "roc_auc"
+    cv_folds: 5
+    use_mlflow: true
+    mlflow_experiment: "scorecard_feature_selection"
+  
+  interaction_terms:
+    enabled: false
+    max_interactions: 10
+  
+  polynomial_features:
+    enabled: false
+    degree: 2
+
+binning:
+  method: "optbinning"
+  max_n_bins: 5
+  min_bin_size: 0.05
+  monotonic: true
+  solver: "cp"  # constraint programming
+  divergence: "iv"  # Information Value
+  
+encoding:
+  method: "woe"
+  smoothing: true
+  smoothing_factor: 0.5
+
+reject_inference:
+  enabled: false
+  method: "parceling"  # parceling, reweighting
+  n_parcels: 10
+
+model:
+  type: "logistic"
+  regularization: "l2"
+  C: 1.0
+  max_iter: 1000
+  solver: "lbfgs"
+  class_weight: "balanced"
+  warm_start: false
+
+calibration:
+  enabled: true
+  method: "intercept_adjustment"
+  target_bad_rate: 0.02
+  
+scaling:
+  pdo: 20
+  base_score: 600
+  base_odds: 50
+
+explainability:
+  shap:
+    enabled: true
+    sample_size: 1000
+  reason_codes:
+    enabled: true
+    num_reasons: 4
+  feature_importance:
+    enabled: true
+    methods: ["coefficient", "permutation"]
+
+monitoring:
+  performance:
+    enabled: true
+    baseline_auc: 0.85
+    alert_threshold_auc: 0.05  # 5% drop
+    storage_path: "./monitoring_data"
+  
+  drift:
+    enabled: true
+    psi_threshold: 0.1
+    ks_threshold: 0.05
+    check_frequency: "daily"
+  
+  predictions:
+    enabled: true
+    track_distributions: true
+    detect_anomalies: true
+  
+  alerts:
+    enabled: true
+    channels: ["email", "slack"]  # Add handlers in code
+    severity_levels: ["warning", "critical"]
+  
+  metrics:
+    enabled: true
+    export_prometheus: true
+    export_json: true
+    collect_interval_seconds: 60
+
+reporting:
+  generate_html: true
+  output_path: "reports/"
+  include_plots: true
+  include_explainability: true
+  include_monitoring: true
+  
+viz:
+  binning_plots: true
+  performance_plots: true
+  score_distribution: true
+  drift_plots: true
+  shap_plots: true
+
+interfaces:
+  api:
+    enabled: false
+    host: "0.0.0.0"
+    port: 8000
+  
+  cli:
+    enabled: true
+  
+  ui:
+    enabled: false
+    port: 8501
+
+tools:
+  mcp:
+    enabled: true
+    tools: ["predict", "evaluate", "feature_select", "analyze_binning"]
+
+governance:
+  model_card:
+    generate: true
+    template: "default"
+  
+  audit_trail:
+    enabled: true
+    log_all_predictions: false  # Set true for full audit
+    retention_days: 90
+  
+  compliance:
+    fcra: true
+    ecoa: true
+    gdpr: false
+
+testing:
+  unit_tests: true
+  integration_tests: true
+  reproducibility_tests: true
+  performance_tests: false

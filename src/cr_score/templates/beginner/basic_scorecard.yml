@@ -1,0 +1,28 @@
+# CR_Score Beginner Template
+# Simple scorecard configuration for getting started
+
+project:
+  name: "my_first_scorecard"
+  description: "Basic credit scorecard"
+  version: "1.0.0"
+
+data:
+  train_path: "data/train.csv"
+  test_path: "data/test.csv"
+  target_column: "default"
+  
+binning:
+  method: "optbinning"  # Optimal binning (easiest)
+  max_n_bins: 5         # Maximum 5 bins per feature
+  
+model:
+  type: "logistic"
+  
+scaling:
+  pdo: 20                # Every 20 points, odds double
+  base_score: 600       # Score 600 = 2% default rate
+  base_odds: 50         # 50:1 odds = 2%
+
+reporting:
+  generate_html: true
+  output_path: "reports/"

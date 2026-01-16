@@ -1,0 +1,78 @@
+# CR_Score Intermediate Template
+# Full-featured scorecard with EDA and feature selection
+
+project:
+  name: "intermediate_scorecard"
+  description: "Production-ready credit scorecard"
+  version: "1.0.0"
+  author: "Data Science Team"
+
+execution:
+  random_seed: 42
+  artifacts_path: "./artifacts"
+  enable_audit_logging: true
+
+data:
+  train_path: "data/train.csv"
+  test_path: "data/test.csv"
+  target_column: "default"
+  id_column: "application_id"
+  
+data_optimization:
+  column_pruning:
+    enabled: true
+    keep_columns: ["age", "income", "debt_to_income_ratio"]
+  type_optimization:
+    enabled: true
+    downcast_numerics: true
+
+eda:
+  univariate:
+    enabled: true
+  bivariate:
+    enabled: true
+    methods: ["correlation", "chi_square", "cramers_v"]
+  drift_detection:
+    enabled: false  # Enable in production
+
+features:
+  selection:
+    enabled: true
+    method: "stepwise"    # forward, backward, stepwise, exhaustive
+    max_features: 10
+    scoring: "roc_auc"
+    cv_folds: 5
+
+binning:
+  method: "optbinning"
+  max_n_bins: 5
+  min_bin_size: 0.05
+  monotonic: true
+  
+encoding:
+  method: "woe"
+  
+model:
+  type: "logistic"
+  regularization: null    # None, "l1", "l2"
+  C: 1.0
+  max_iter: 1000
+
+calibration:
+  enabled: true
+  target_bad_rate: 0.02   # Calibrate to 2% default rate
+  
+scaling:
+  pdo: 20
+  base_score: 600
+  base_odds: 50
+
+reporting:
+  generate_html: true
+  output_path: "reports/"
+  include_plots: true
+  
+viz:
+  binning_plots: true
+  performance_plots: true
+  score_distribution: true
