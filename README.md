@@ -11,8 +11,14 @@ Config-driven, Spark-native platform for end-to-end credit scorecard development
 - **Deterministic by Default**: Same config + same data = same result
 - **Spark-Native**: Efficient processing of 100M+ rows with intelligent compression
 - **Scale Without Losing Correctness**: Sample weighting preserves likelihoods exactly
+- **Model-Agnostic Feature Selection**: Forward, backward, stepwise, exhaustive with MLflow tracking
+- **Automated Binning**: OptBinning integration for optimal WoE transformation
+- **Simplified 3-Line Interface**: Build complete scorecards with minimal code
+- **Interactive Visualizations**: Plotly-based charts for binning, scores, performance
+- **HTML Report Generation**: Professional reports with embedded visualizations
+- **MCP Tools**: Agent-ready workflows for AI integration
+- **Comprehensive Testing**: pytest-based test suite with 35+ tests
 - **Multiple Interfaces**: CLI, SDK, API, UI
-- **MCP/Tool Integration**: Agent-ready workflows
 - **Enterprise Audit Trails**: Structured logging for compliance
 
 ## Architecture
@@ -30,6 +36,11 @@ Reject Inference → Modeling → Calibration → Scaling → Reporting → Expo
 4. **Spark Where It Matters**: Heavy operations in Spark, orchestration in Python
 5. **Scale Without Losing Correctness**: Post-binning compression reduces data 20x-100x
 
+## Version
+
+**Current Version**: 1.0.0 (Production Ready)
+**Status**: ✅ Feature Complete | 100% Core Implementation
+
 ## Quick Start
 
 ### Installation
@@ -45,6 +56,9 @@ source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 
 # Install package
 pip install -e ".[dev]"
+
+# Run tests
+pytest tests/unit -v
 ```
 
 ### Basic Usage
@@ -123,6 +137,75 @@ scaler = PDOScaler(pdo=20, base_score=600, base_odds=50)
 scores = scaler.transform(predictions)
 ```
 
+**With Automated Feature Selection:**
+
+```python
+from cr_score import ScorecardPipeline
+
+# Build scorecard with automatic feature selection
+pipeline = ScorecardPipeline(
+    feature_selection="stepwise",  # forward, backward, or stepwise
+    max_features=10,               # Limit final features
+    max_n_bins=5,
+    pdo=20,
+    base_score=600
+)
+
+pipeline.fit(df_train, target_col="default")
+scores = pipeline.predict(df_test)
+
+# See which features were selected
+summary = pipeline.get_summary()
+print(f"Selected {summary['n_features']} features:")
+print(summary['selected_features'])
+```
+
+**With Interactive Visualizations:**
+
+```python
+from cr_score.viz import BinningVisualizer, ScoreVisualizer
+
+# Binning analysis
+bin_viz = BinningVisualizer()
+fig = bin_viz.plot_binning_table(binning_table, title="Age Binning")
+fig.show()
+
+fig = bin_viz.plot_iv_summary(iv_summary)
+fig.write_html("iv_analysis.html")
+
+# Score analysis
+score_viz = ScoreVisualizer()
+fig = score_viz.plot_roc_curve(y_test, probas)
+fig.show()
+
+fig = score_viz.plot_score_distribution(scores, y_test)
+fig.write_html("score_distribution.html")
+
+# Comprehensive report
+fig = score_viz.create_model_report(y_test, probas, scores)
+fig.write_html("model_report.html")
+```
+
+**Generate Professional HTML Reports:**
+
+```python
+from cr_score.reporting import HTMLReportGenerator
+
+# Generate complete scorecard report
+generator = HTMLReportGenerator()
+report_path = generator.generate_scorecard_report(
+    pipeline=pipeline,
+    X_test=X_test,
+    y_test=y_test,
+    output_path="scorecard_report.html",
+    title="Credit Scorecard Report",
+    author="Risk Analytics Team"
+)
+
+print(f"Report generated: {report_path}")
+# Opens in browser with interactive Plotly charts
+```
+
 **Run Examples:**
 
 ```bash
@@ -131,6 +214,9 @@ python examples/simple_3_line_scorecard.py
 
 # Complete detailed workflow
 python examples/complete_scorecard_workflow.py
+
+# Feature selection with MLflow tracking
+python examples/feature_selection_with_mlflow.py
 ```
 
 ### Configuration Example
@@ -191,9 +277,60 @@ CR_Score/
 └── pyproject.toml         # Package configuration
 ```
 
+## MCP Tools for AI Agents
+
+CR_Score provides MCP (Model Context Protocol) tools for seamless AI agent integration:
+
+```python
+from cr_score.tools import (
+    score_predict_tool,
+    model_evaluate_tool,
+    feature_select_tool,
+    binning_analyze_tool,
+)
+
+# Predict scores for new applications
+result = score_predict_tool(
+    data_path="new_applications.csv",
+    model_path="models/scorecard_v1.pkl",
+    output_path="predictions.csv"
+)
+print(f"Scored {result['n_records']} records")
+print(f"Mean score: {result['score_statistics']['mean']:.0f}")
+
+# Evaluate model performance
+result = model_evaluate_tool(
+    data_path="test_data.csv",
+    model_path="models/scorecard_v1.pkl"
+)
+print(f"AUC: {result['metrics']['auc']:.3f}")
+print(f"Interpretation: {result['interpretation']['auc']}")
+
+# Select best features automatically
+result = feature_select_tool(
+    data_path="train_data.csv",
+    target_col="default",
+    method="stepwise",
+    max_features=10
+)
+print(f"Selected {result['n_features_selected']} features")
+print(result['selected_features'])
+
+# Analyze optimal binning
+result = binning_analyze_tool(
+    data_path="train_data.csv",
+    feature_col="age",
+    target_col="default",
+    max_bins=5
+)
+print(f"IV: {result['iv']:.3f} ({result['iv_strength']})")
+```
+
+All tools return structured JSON responses with status, results, and error handling. Perfect for AI agents!
+
 ## Current Status
 
-### ✅ Completed (v0.3.0-beta) - 70% Complete
+### ✅ Production Ready (v1.0.0) - 100% Core Complete
 
 **Core Infrastructure** (100% Complete)
 - ✅ Config system with Pydantic validation (all URD schemas)
@@ -240,6 +377,43 @@ CR_Score/
 - ✅ PDO (Points-Double-Odds) transformation
 - ✅ Score band generation
 - ✅ Bidirectional score/probability conversion
+
+**Feature Selection** (100% Complete)
+- ✅ Forward selection (greedy additive)
+- ✅ Backward elimination (greedy removal)
+- ✅ Stepwise selection (bidirectional)
+- ✅ Exhaustive search (small feature sets)
+- ✅ Model-agnostic (works with any sklearn estimator)
+- ✅ MLflow integration for experiment tracking
+
+**Simplified Pipeline** (100% Complete)
+- ✅ ScorecardPipeline (3-line interface)
+- ✅ AutoBinner with OptBinning integration
+- ✅ Integrated feature selection
+- ✅ End-to-end automation
+
+**Visualization & Reporting** (100% Complete)
+- ✅ BinningVisualizer (bin distributions, IV, WoE)
+- ✅ ScoreVisualizer (ROC, calibration, KS, score bands)
+- ✅ HTMLReportGenerator (professional reports)
+- ✅ Interactive Plotly charts
+- ✅ Model performance diagnostics
+
+**MCP Tools & Integration** (100% Complete)
+- ✅ score_predict_tool (predict with trained models)
+- ✅ model_evaluate_tool (evaluate performance)
+- ✅ feature_select_tool (automated selection)
+- ✅ binning_analyze_tool (binning analysis)
+- ✅ Standardized JSON responses
+- ✅ Agent-ready interfaces
+
+**Testing & CI/CD** (100% Complete)
+- ✅ 35+ unit tests (pytest)
+- ✅ Test fixtures and conftest
+- ✅ GitHub Actions CI/CD pipeline
+- ✅ Multi-Python version testing (3.9, 3.10, 3.11)
+- ✅ Coverage reporting (Codecov)
+- ✅ Linting and formatting checks
 
 **Simplified Interface** (100% Complete) 🆕
 - ✅ **ScorecardPipeline** - 3-line scorecard development
