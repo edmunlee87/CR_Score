@@ -1,0 +1,1 @@
+{"alert_id": "7af89d5aff39", "timestamp": "2026-01-16T22:11:14.549495", "title": "Test Alert", "severity": "warning", "details": {"metric": "auc", "value": 0.75}, "source": "test", "status": "active", "acknowledged": false}

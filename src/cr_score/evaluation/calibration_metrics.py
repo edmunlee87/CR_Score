@@ -52,7 +52,6 @@ class CalibrationMetrics:
     def calculate_log_loss(
         y_true: np.ndarray,
         y_proba: np.ndarray,
-        eps: float = 1e-15,
     ) -> float:
         """
         Calculate log loss (cross-entropy loss).
@@ -62,7 +61,6 @@ class CalibrationMetrics:
         Args:
             y_true: True binary labels
             y_proba: Predicted probabilities
-            eps: Small constant to avoid log(0)
         
         Returns:
             Log loss
@@ -70,7 +68,7 @@ class CalibrationMetrics:
         Example:
             >>> logloss = CalibrationMetrics.calculate_log_loss(y_true, y_proba)
         """
-        return float(log_loss(y_true, y_proba, eps=eps))
+        return float(log_loss(y_true, y_proba))
     
     @staticmethod
     def calculate_calibration_curve(
