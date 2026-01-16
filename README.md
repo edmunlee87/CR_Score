@@ -9,13 +9,17 @@ Config-driven, Spark-native platform for end-to-end credit scorecard development
 - **Config-First Design**: Every action expressible as YAML configuration
 - **Artifact-First**: All outputs versioned, hashed, and auditable
 - **Deterministic by Default**: Same config + same data = same result
-- **Spark-Native**: Efficient processing of 100M+ rows with intelligent compression
-- **Scale Without Losing Correctness**: Sample weighting preserves likelihoods exactly
+- **Multiple Model Families**: Logistic, RandomForest, XGBoost, LightGBM with unified interface
+- **Comprehensive Metrics**: 40+ metrics including PSI, CSI, MCC, Gini, KS, calibration
 - **Model-Agnostic Feature Selection**: Forward, backward, stepwise, exhaustive with MLflow tracking
 - **Automated Binning**: OptBinning integration for optimal WoE transformation
+- **Multi-Format Export**: JSON, CSV, Excel, Markdown for easy integration
+- **Spark-Native**: Efficient processing of 100M+ rows with intelligent compression
 - **Simplified 3-Line Interface**: Build complete scorecards with minimal code
 - **Interactive Visualizations**: Plotly-based charts for binning, scores, performance
 - **HTML Report Generation**: Professional reports with embedded visualizations
+- **Production Monitoring**: Real-time performance tracking, drift detection, alerting
+- **SHAP Explainability**: Model explanations and regulatory-compliant reason codes
 - **MCP Tools**: Agent-ready workflows for AI integration
 - **Comprehensive Testing**: pytest-based test suite with 35+ tests
 - **Multiple Interfaces**: CLI, SDK, API, UI
@@ -76,14 +80,15 @@ python data/generate_sample_data.py
 jupyter notebook
 ```
 
-**5 Progressive Playbooks:**
+**6 Progressive Playbooks:**
 - **01_quickstart.ipynb** (Beginner, 5-10 min) - Build your first scorecard in 3 lines
 - **02_feature_selection.ipynb** (Intermediate, 15-20 min) - Master feature selection methods
 - **03_visualization_reporting.ipynb** (Intermediate, 15-20 min) - Create beautiful visualizations
 - **04_complete_workflow.ipynb** (Intermediate, 25-30 min) - End-to-end scorecard workflow
 - **05_advanced_topics.ipynb** (Advanced, 30-40 min) - Production deployment patterns
+- **06_model_comparison.ipynb** (Advanced, 25-30 min) - Compare model families and export reports
 
-**No PySpark required** for playbooks 01-04! See `playbooks/README.md` for details.
+**No PySpark required** for playbooks 01-05! See `playbooks/README.md` for details.
 
 ### Basic Usage
 
@@ -182,6 +187,47 @@ scores = pipeline.predict(df_test)
 summary = pipeline.get_summary()
 print(f"Selected {summary['n_features']} features:")
 print(summary['selected_features'])
+```
+
+**Multiple Model Families:**
+
+```python
+from cr_score.model import (
+    LogisticScorecard,
+    RandomForestScorecard,
+    XGBoostScorecard,
+    LightGBMScorecard
+)
+from cr_score.reporting import ReportExporter
+
+# Train multiple models
+models = {
+    'Logistic': LogisticScorecard(),
+    'RandomForest': RandomForestScorecard(n_estimators=100, max_depth=5),
+    'XGBoost': XGBoostScorecard(n_estimators=100),
+    'LightGBM': LightGBMScorecard(n_estimators=100)
+}
+
+# Compare performance
+results = {}
+for name, model in models.items():
+    model.fit(X_train, y_train)
+    y_proba = model.predict_proba(X_test)[:, 1]
+    metrics = model.get_performance_metrics(y_test, y_proba)
+    results[name] = metrics
+    print(f"{name} AUC: {metrics['ranking']['auc']:.3f}")
+
+# Export comprehensive reports (JSON, CSV, Excel, Markdown)
+exporter = ReportExporter()
+for name, model in models.items():
+    exporter.export_comprehensive_report(
+        model=model,
+        metrics=results[name],
+        X_test=X_test,
+        y_test=y_test,
+        output_dir=f'reports/{name.lower()}',
+        formats=['json', 'csv', 'excel', 'markdown']
+    )
 ```
 
 **With Interactive Visualizations:**
