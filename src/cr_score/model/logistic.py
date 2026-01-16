@@ -36,6 +36,8 @@ class LogisticScorecard(BaseEstimator, ClassifierMixin):
         >>> metrics = model.get_performance_metrics(y_test, y_pred)
     """
 
+    _estimator_type = "classifier"
+
     def __init__(
         self,
         regularization: Optional[str] = None,
