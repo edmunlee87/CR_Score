@@ -10,16 +10,9 @@ import numpy as np
 import pandas as pd
 from sklearn.base import BaseEstimator, ClassifierMixin
 from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import (
-    accuracy_score,
-    auc,
-    classification_report,
-    confusion_matrix,
-    roc_auc_score,
-    roc_curve,
-)
 
 from cr_score.core.logging import get_audit_logger
+from cr_score.evaluation import PerformanceEvaluator
 
 
 class LogisticScorecard(BaseEstimator, ClassifierMixin):
@@ -56,6 +49,7 @@ class LogisticScorecard(BaseEstimator, ClassifierMixin):
         self.C = C
         self.random_state = random_state
         self.logger = get_audit_logger()
+        self.evaluator = PerformanceEvaluator()
 
         self.model_: Optional[LogisticRegression] = None
         self.feature_names_: Optional[List[str]] = None
@@ -178,60 +172,53 @@ class LogisticScorecard(BaseEstimator, ClassifierMixin):
         y_true: pd.Series,
         y_pred_proba: np.ndarray,
         threshold: float = 0.5,
+        include_stability: bool = False,
+        y_train_proba: Optional[np.ndarray] = None,
     ) -> Dict[str, Any]:
         """
         Calculate comprehensive performance metrics.
+
+        Now includes classification, ranking, calibration, and optionally stability metrics.
 
         Args:
             y_true: True labels
             y_pred_proba: Predicted probabilities
             threshold: Classification threshold
+            include_stability: Whether to include PSI/CSI stability metrics
+            y_train_proba: Training probabilities for stability comparison (optional)
 
         Returns:
-            Dictionary with performance metrics
+            Dictionary with all performance metrics
 
         Example:
             >>> metrics = model.get_performance_metrics(y_test, predictions)
-            >>> print(f"AUC: {metrics['auc']:.3f}")
+            >>> print(f"AUC: {metrics['ranking']['auc']:.3f}")
+            >>> print(f"Brier Score: {metrics['calibration']['brier_score']:.3f}")
+            >>> print(f"MCC: {metrics['classification']['mcc']:.3f}")
         """
         y_pred = (y_pred_proba >= threshold).astype(int)
+        y_true_np = y_true.values if isinstance(y_true, pd.Series) else y_true
 
-        # ROC AUC
-        auc_score = roc_auc_score(y_true, y_pred_proba)
+        # Get all metrics using the unified evaluator
+        results = self.evaluator.evaluate_all(
+            y_true=y_true_np,
+            y_pred=y_pred,
+            y_proba=y_pred_proba,
+            threshold=threshold,
+        )
 
-        # Confusion matrix
-        tn, fp, fn, tp = confusion_matrix(y_true, y_pred).ravel()
+        # Add stability metrics if requested
+        if include_stability and y_train_proba is not None:
+            stability_results = self.evaluator.evaluate_stability(
+                expected=y_train_proba,
+                actual=y_pred_proba,
+            )
+            results["stability"] = stability_results
 
-        # Calculate metrics
-        accuracy = accuracy_score(y_true, y_pred)
-        precision = tp / (tp + fp) if (tp + fp) > 0 else 0
-        recall = tp / (tp + fn) if (tp + fn) > 0 else 0
-        f1 = 2 * precision * recall / (precision + recall) if (precision + recall) > 0 else 0
-        specificity = tn / (tn + fp) if (tn + fp) > 0 else 0
+        # Add interpretations
+        results["interpretations"] = self.evaluator.interpret_results(results)
 
-        # Gini coefficient
-        gini = 2 * auc_score - 1
-
-        # KS statistic
-        fpr, tpr, thresholds = roc_curve(y_true, y_pred_proba)
-        ks = np.max(tpr - fpr)
-
-        return {
-            "auc": float(auc_score),
-            "gini": float(gini),
-            "ks": float(ks),
-            "accuracy": float(accuracy),
-            "precision": float(precision),
-            "recall": float(recall),
-            "f1_score": float(f1),
-            "specificity": float(specificity),
-            "confusion_matrix": {
-                "true_negative": int(tn),
-                "false_positive": int(fp),
-                "false_negative": int(fn),
-                "true_positive": int(tp),
-            },
-        }
+        return results
 
     def get_roc_curve(
         self,
@@ -253,13 +240,150 @@ class LogisticScorecard(BaseEstimator, ClassifierMixin):
             >>> import matplotlib.pyplot as plt
             >>> plt.plot(roc_data["fpr"], roc_data["tpr"])
         """
+        from sklearn.metrics import auc as sklearn_auc, roc_curve
+
         fpr, tpr, thresholds = roc_curve(y_true, y_pred_proba)
 
         return {
             "fpr": fpr,
             "tpr": tpr,
             "thresholds": thresholds,
-            "auc": float(auc(fpr, tpr)),
+            "auc": float(sklearn_auc(fpr, tpr)),
+        }
+
+    def get_metrics_summary(
+        self,
+        y_true: pd.Series,
+        y_pred_proba: np.ndarray,
+        threshold: float = 0.5,
+    ) -> pd.DataFrame:
+        """
+        Get summary table of key metrics.
+
+        Args:
+            y_true: True labels
+            y_pred_proba: Predicted probabilities
+            threshold: Classification threshold
+
+        Returns:
+            DataFrame with key metrics
+
+        Example:
+            >>> summary = model.get_metrics_summary(y_test, predictions)
+            >>> print(summary)
+        """
+        metrics = self.get_performance_metrics(y_true, y_pred_proba, threshold)
+        return self.evaluator.summary(metrics)
+
+    def get_lift_curve(
+        self,
+        y_true: pd.Series,
+        y_pred_proba: np.ndarray,
+        n_bins: int = 10,
+    ) -> pd.DataFrame:
+        """
+        Calculate lift curve data.
+
+        Args:
+            y_true: True labels
+            y_pred_proba: Predicted probabilities
+            n_bins: Number of bins/deciles
+
+        Returns:
+            DataFrame with lift curve data
+
+        Example:
+            >>> lift = model.get_lift_curve(y_test, predictions, n_bins=10)
+            >>> print(lift)
+        """
+        y_true_np = y_true.values if isinstance(y_true, pd.Series) else y_true
+        return self.evaluator.ranking.calculate_lift_curve(y_true_np, y_pred_proba, n_bins)
+
+    def get_gains_curve(
+        self,
+        y_true: pd.Series,
+        y_pred_proba: np.ndarray,
+        n_bins: int = 10,
+    ) -> pd.DataFrame:
+        """
+        Calculate cumulative gains curve data.
+
+        Args:
+            y_true: True labels
+            y_pred_proba: Predicted probabilities
+            n_bins: Number of bins/deciles
+
+        Returns:
+            DataFrame with gains curve data
+
+        Example:
+            >>> gains = model.get_gains_curve(y_test, predictions, n_bins=10)
+            >>> print(gains)
+        """
+        y_true_np = y_true.values if isinstance(y_true, pd.Series) else y_true
+        return self.evaluator.ranking.calculate_gains_curve(y_true_np, y_pred_proba, n_bins)
+
+    def get_calibration_curve(
+        self,
+        y_true: pd.Series,
+        y_pred_proba: np.ndarray,
+        n_bins: int = 10,
+    ) -> Dict[str, np.ndarray]:
+        """
+        Calculate calibration curve data.
+
+        Args:
+            y_true: True labels
+            y_pred_proba: Predicted probabilities
+            n_bins: Number of bins
+
+        Returns:
+            Dictionary with calibration curve data
+
+        Example:
+            >>> calib = model.get_calibration_curve(y_test, predictions)
+            >>> plt.plot(calib['mean_predicted'], calib['fraction_positives'])
+        """
+        y_true_np = y_true.values if isinstance(y_true, pd.Series) else y_true
+        frac_pos, mean_pred = self.evaluator.calibration.calculate_calibration_curve(
+            y_true_np, y_pred_proba, n_bins
+        )
+
+        return {
+            "fraction_positives": frac_pos,
+            "mean_predicted": mean_pred,
+        }
+
+    def calculate_psi(
+        self,
+        train_proba: np.ndarray,
+        test_proba: np.ndarray,
+        bins: int = 10,
+    ) -> Dict[str, Any]:
+        """
+        Calculate Population Stability Index (PSI).
+
+        Args:
+            train_proba: Training probabilities (baseline)
+            test_proba: Test probabilities (current)
+            bins: Number of bins
+
+        Returns:
+            Dictionary with PSI value and interpretation
+
+        Example:
+            >>> psi_result = model.calculate_psi(train_probas, test_probas)
+            >>> print(f"PSI: {psi_result['psi']:.3f} ({psi_result['status']})")
+        """
+        psi = self.evaluator.stability.calculate_psi(train_proba, test_proba, bins)
+        status = self.evaluator.stability.psi_interpretation(psi)
+
+        return {
+            "psi": psi,
+            "status": status,
+            "breakdown": self.evaluator.stability.calculate_psi_breakdown(
+                train_proba, test_proba, bins
+            ),
         }
 
     def export_model(self) -> Dict[str, Any]:
