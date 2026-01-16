@@ -127,6 +127,26 @@ Compare all 4 model families and choose the best one for your use case.
 
 ---
 
+### 07: Production Monitoring & Observability (Advanced, 35-40 min)
+**File:** `07_monitoring_observability.ipynb`
+
+Master production monitoring, drift detection, and observability features.
+
+**What you'll learn:**
+- Population Stability Index (PSI) and Characteristic Stability Index (CSI)
+- Performance monitoring with baselines and alerts
+- Feature-level drift detection
+- SHAP explainability for model interpretation
+- Regulatory-compliant reason codes (FCRA/ECOA)
+- Prometheus-compatible metrics collection
+- Alert management system
+- Interactive observability dashboards
+- Comprehensive report exports
+
+**No PySpark required**
+
+---
+
 ## Getting Started
 
 ### 1. Setup Environment
@@ -163,6 +183,7 @@ Complete the playbooks in order:
 4. 04_complete_workflow.ipynb
 5. 05_advanced_topics.ipynb (Requires PySpark)
 6. 06_model_families.ipynb (Compare all model types)
+7. 07_monitoring_observability.ipynb (Production monitoring)
 
 ## Sample Data
 
