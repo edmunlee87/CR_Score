@@ -8,6 +8,7 @@ from typing import Any, Dict, List, Optional
 
 import numpy as np
 import pandas as pd
+from sklearn.base import BaseEstimator, ClassifierMixin
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import (
     accuracy_score,
@@ -21,7 +22,7 @@ from sklearn.metrics import (
 from cr_score.core.logging import get_audit_logger
 
 
-class LogisticScorecard:
+class LogisticScorecard(BaseEstimator, ClassifierMixin):
     """
     Logistic regression model for scorecard development.
 
