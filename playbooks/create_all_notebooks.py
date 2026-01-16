@@ -50,8 +50,8 @@ from pathlib import Path
 project_root = Path.cwd().parent
 sys.path.insert(0, str(project_root / 'src'))
 
+from sklearn.linear_model import LogisticRegression
 from cr_score.features import ForwardSelector, BackwardSelector, StepwiseSelector
-from cr_score.model import LogisticScorecard
 
 print("[OK] Libraries imported!")"""),
         
