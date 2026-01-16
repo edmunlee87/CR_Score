@@ -71,6 +71,7 @@ Documentation Structure
    guides/feature_selection
    guides/visualization
    guides/reporting
+   guides/observability
    guides/mcp_tools
 
 .. toctree::
