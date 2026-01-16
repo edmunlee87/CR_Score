@@ -80,15 +80,16 @@ python data/generate_sample_data.py
 jupyter notebook
 ```
 
-**6 Progressive Playbooks:**
+**7 Progressive Playbooks:**
 - **01_quickstart.ipynb** (Beginner, 5-10 min) - Build your first scorecard in 3 lines
 - **02_feature_selection.ipynb** (Intermediate, 15-20 min) - Master feature selection methods
 - **03_visualization_reporting.ipynb** (Intermediate, 15-20 min) - Create beautiful visualizations
 - **04_complete_workflow.ipynb** (Intermediate, 25-30 min) - End-to-end scorecard workflow
 - **05_advanced_topics.ipynb** (Advanced, 30-40 min) - Production deployment patterns
-- **06_model_comparison.ipynb** (Advanced, 25-30 min) - Compare model families and export reports
+- **06_model_families.ipynb** (Advanced, 30-35 min) - Compare all model families
+- **07_monitoring_observability.ipynb** (Advanced, 35-40 min) - Production monitoring and drift detection
 
-**No PySpark required** for playbooks 01-05! See `playbooks/README.md` for details.
+**No PySpark required** for playbooks 01-06! See `playbooks/README.md` for details.
 
 ### Basic Usage
 
