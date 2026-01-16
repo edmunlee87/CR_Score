@@ -90,14 +90,14 @@ class LogisticScorecard:
         # Configure model
         penalty = self.regularization if self.regularization else "l2"
         if self.regularization is None:
-            penalty = "none"
+            penalty = None
 
         self.model_ = LogisticRegression(
             penalty=penalty,
             C=self.C,
             random_state=self.random_state,
             max_iter=1000,
-            solver="lbfgs" if penalty in ["none", "l2"] else "saga",
+            solver="lbfgs" if penalty in [None, "l2"] else "saga",
         )
 
         # Fit model
