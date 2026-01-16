@@ -107,6 +107,26 @@ Explore enterprise-grade features for production deployment.
 
 ---
 
+### 06: Model Families Comparison (Advanced, 30-35 min)
+**File:** `06_model_families.ipynb`
+
+Compare all 4 model families and choose the best one for your use case.
+
+**What you'll learn:**
+- Logistic Regression for interpretability
+- Random Forest for non-linear patterns
+- XGBoost for high performance
+- LightGBM for speed and large datasets
+- Comprehensive metrics comparison (40+ metrics)
+- Feature importance differences across models
+- Exporting reports (JSON, CSV, Excel, Markdown)
+- Model selection guidance and recommendations
+
+**No PySpark required**  
+**XGBoost and LightGBM are optional** (will work with Logistic and RandomForest only)
+
+---
+
 ## Getting Started
 
 ### 1. Setup Environment
@@ -142,6 +162,7 @@ Complete the playbooks in order:
 3. 03_visualization_reporting.ipynb
 4. 04_complete_workflow.ipynb
 5. 05_advanced_topics.ipynb (Requires PySpark)
+6. 06_model_families.ipynb (Compare all model types)
 
 ## Sample Data
 
