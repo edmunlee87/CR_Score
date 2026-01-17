@@ -69,10 +69,12 @@ Documentation Structure
    guides/quickstart
    guides/configuration
    guides/feature_selection
+   guides/enhanced_features
    guides/visualization
    guides/reporting
    guides/explainability
    guides/observability
+   guides/spark_optimization
    guides/mcp_tools
 
 .. toctree::

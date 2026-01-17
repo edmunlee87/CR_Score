@@ -1,0 +1,194 @@
+# Feature Engineering Configuration Example
+# This file shows how to configure feature engineering via YAML
+
+# Global settings
+id_col: customer_id
+time_col: snapshot_date
+group_cols:
+  - customer_id
+
+# Feature recipes
+recipes:
+  # ========================================
+  # DELINQUENCY FEATURES
+  # ========================================
+  - name: max_dpd_3m
+    source_cols: days_past_due
+    operation: max
+    window: last_3_months
+    description: "Maximum days past due in last 3 months"
+  
+  - name: max_dpd_6m
+    source_cols: days_past_due
+    operation: max
+    window: last_6_months
+    description: "Maximum days past due in last 6 months"
+  
+  - name: max_dpd_12m
+    source_cols: days_past_due
+    operation: max
+    window: last_12_months
+    description: "Maximum days past due in last 12 months"
+  
+  - name: avg_dpd_12m
+    source_cols: days_past_due
+    operation: mean
+    window: last_12_months
+    description: "Average days past due in last 12 months"
+  
+  - name: worst_dpd_ever
+    source_cols: days_past_due
+    operation: worst
+    window: all_time
+    description: "Worst delinquency ever recorded"
+  
+  # ========================================
+  # BALANCE & UTILIZATION FEATURES
+  # ========================================
+  - name: avg_balance
+    source_cols: balance
+    operation: mean
+    description: "Average balance across all periods"
+  
+  - name: max_balance
+    source_cols: balance
+    operation: max
+    description: "Maximum balance"
+  
+  - name: min_balance
+    source_cols: balance
+    operation: min
+    description: "Minimum balance"
+  
+  - name: balance_volatility
+    source_cols: balance
+    operation: std
+    description: "Balance volatility (standard deviation)"
+  
+  - name: balance_range
+    source_cols: balance
+    operation: range
+    description: "Balance range (max - min)"
+  
+  - name: utilization
+    source_cols:
+      - balance
+      - credit_limit
+    operation: ratio
+    description: "Credit utilization ratio (balance / limit)"
+  
+  - name: available_credit
+    source_cols:
+      - credit_limit
+      - balance
+    operation: difference
+    description: "Available credit (limit - balance)"
+  
+  # ========================================
+  # PAYMENT BEHAVIOR FEATURES
+  # ========================================
+  - name: total_payments_3m
+    source_cols: payment_amount
+    operation: sum
+    window: last_3_months
+    description: "Total payments in last 3 months"
+  
+  - name: total_payments_6m
+    source_cols: payment_amount
+    operation: sum
+    window: last_6_months
+    description: "Total payments in last 6 months"
+  
+  - name: total_payments_12m
+    source_cols: payment_amount
+    operation: sum
+    window: last_12_months
+    description: "Total payments in last 12 months"
+  
+  - name: avg_payment
+    source_cols: payment_amount
+    operation: mean
+    description: "Average payment amount"
+  
+  - name: payment_consistency
+    source_cols: payment_amount
+    operation: std
+    description: "Payment consistency (lower is better)"
+  
+  - name: max_payment
+    source_cols: payment_amount
+    operation: max
+    description: "Maximum payment made"
+  
+  # ========================================
+  # ACCOUNT & INQUIRY FEATURES
+  # ========================================
+  - name: avg_num_accounts
+    source_cols: num_accounts
+    operation: mean
+    description: "Average number of accounts"
+  
+  - name: debt_per_account
+    source_cols:
+      - total_debt
+      - num_accounts
+    operation: ratio
+    description: "Average debt per account"
+  
+  - name: total_inquiries_6m
+    source_cols: num_inquiries
+    operation: sum
+    window: last_6_months
+    description: "Total credit inquiries in last 6 months"
+  
+  - name: inquiry_rate
+    source_cols: num_inquiries
+    operation: mean
+    description: "Average inquiry rate"
+  
+  # ========================================
+  # TRANSFORMED FEATURES
+  # ========================================
+  - name: log_balance
+    source_cols: balance
+    operation: log
+    params:
+      add_one: true
+    description: "Log-transformed balance"
+  
+  - name: log_debt
+    source_cols: total_debt
+    operation: log
+    params:
+      add_one: true
+    description: "Log-transformed total debt"
+  
+  - name: sqrt_balance
+    source_cols: balance
+    operation: sqrt
+    description: "Square root of balance"
+  
+  - name: dpd_capped_90
+    source_cols: days_past_due
+    operation: clip
+    params:
+      lower: 0
+      upper: 90
+    description: "Days past due capped at 90"
+  
+  # ========================================
+  # COMPOSITE RISK FEATURES
+  # ========================================
+  - name: inquiry_dpd_risk
+    source_cols:
+      - num_inquiries
+      - days_past_due
+    operation: product
+    description: "Inquiry × DPD interaction risk"
+  
+  - name: debt_to_payment_ratio
+    source_cols:
+      - total_debt
+      - payment_amount
+    operation: ratio
+    description: "Total debt to payment ratio"

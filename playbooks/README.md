@@ -147,6 +147,60 @@ Master production monitoring, drift detection, and observability features.
 
 ---
 
+### 08: Enhanced Feature Engineering (Intermediate, 25-30 min)
+**File:** `08_enhanced_features.ipynb`
+
+Learn advanced feature engineering capabilities for credit risk modeling.
+
+**What you'll learn:**
+- Temporal trend features (delta, momentum, volatility, trend slope)
+- Categorical encoding (frequency, target mean, rare grouping)
+- Feature validation with quality metrics
+- Dependency graph management
+- Feature metadata and lineage tracking
+- Integration with existing pipelines
+
+**No PySpark required**
+
+---
+
+### 09: Temporal Visualization & Drift Analysis (Intermediate, 20-25 min)
+**File:** `09_temporal_visualization.ipynb`
+
+Visualize temporal drift and stability across multiple snapshots for model monitoring.
+
+**What you'll learn:**
+- Bin-level temporal drift visualization
+- Event rate and population % across snapshots
+- Delta vs baseline comparisons
+- PSI visualization for distribution shift detection
+- Score stability metrics (approval rate, bad rate, capture rate)
+- KS curve comparisons over time
+- Segmentation support for multi-portfolio analysis
+- Export visualizations with metadata for audit trails
+
+**No PySpark required**
+
+---
+
+### 10: Spark Default Feature Engineering (Intermediate, 25-30 min)
+**File:** `10_spark_default_feature_engineering.ipynb`
+
+Learn how Spark is now the default engine for feature engineering, with automatic detection and seamless integration.
+
+**What you'll learn:**
+- Spark as default engine for large-scale processing
+- Automatic engine detection (pandas vs Spark)
+- Unified FeatureEngineer interface
+- Enhanced features with Spark (temporal, categorical, validation)
+- Pipeline with Spark DataFrames
+- Performance comparisons (pandas vs Spark)
+- When to use Spark vs pandas
+
+**PySpark recommended** (examples work without it but show Spark capabilities)
+
+---
+
 ## Getting Started
 
 ### 1. Setup Environment
@@ -184,6 +238,9 @@ Complete the playbooks in order:
 5. 05_advanced_topics.ipynb (Requires PySpark)
 6. 06_model_families.ipynb (Compare all model types)
 7. 07_monitoring_observability.ipynb (Production monitoring)
+8. 08_enhanced_features.ipynb (Advanced feature engineering)
+9. 09_temporal_visualization.ipynb (Temporal drift analysis)
+10. 10_spark_default_feature_engineering.ipynb (Spark default & auto-detection)
 
 ## Sample Data
 

@@ -1,0 +1,181 @@
+USER REQUIREMENT DOCUMENT (URD)
+Project: Scorecard SDK – Feature Engineering Enhancements
+Module: feature_engineering/engineering.py
+Version: v1.2 (Focused Scope)
+
+Scope:
+This URD focuses only on:
+1. Missing value strategy
+2. Temporal trend features
+3. Categorical encoding support
+4. Feature metadata & lineage
+5. Feature validation hooks
+6. Feature dependency graph
+7. Spark performance optimizations
+
+Binning and WoE are handled in separate modules and must NOT be implemented here.
+
+------------------------------------------------------------
+1. Missing Value Strategy (Critical)
+------------------------------------------------------------
+
+REQ-1.1 Extend FeatureRecipe with:
+- missing_strategy: {"keep","zero","mean","median","constant","flag"}
+- missing_value: Any (used if constant)
+- create_missing_indicator: bool (default False)
+- impute_scope: {"global","group"} (default global)
+
+REQ-1.2 Missing handling must be applied consistently before feature computation.
+
+REQ-1.3 If create_missing_indicator=True:
+- Create indicator column:
+  "<feature_or_source>__is_missing"
+- Indicator must be created BEFORE imputation.
+
+REQ-1.4 Ratio safety:
+- Add divide_by_zero_policy: {"nan","zero","constant"}
+- constant_value configurable
+- Log all divide-by-zero handling in registry.
+
+REQ-1.5 Missing handling must work consistently in Pandas and Spark.
+
+------------------------------------------------------------
+2. Temporal Trend Features (Risk Critical)
+------------------------------------------------------------
+
+REQ-2.1 Add new operations:
+- delta               : last - previous
+- pct_change          : (last - previous) / abs(previous)
+- momentum            : last - mean(window)
+- volatility           : std(window) or cv(window)
+- trend_slope          : linear regression slope over window
+- rolling_rank         : rank of last observation in window
+- minmax_range         : max(window) - min(window)
+
+REQ-2.2 Windowing:
+- Must support time_col + group_cols.
+- Support rolling windows by:
+  - month count
+  - row count
+- Enforce deterministic ordering by time_col.
+
+REQ-2.3 Spark:
+- Implement supported subset efficiently.
+- Raise NotImplementedError for unsupported ops.
+
+------------------------------------------------------------
+3. Categorical Encoding Support
+------------------------------------------------------------
+
+REQ-3.1 Provide lightweight encoders (not WoE):
+- freq_encoding        : category frequency
+- target_mean_encoding : smoothed mean encoding
+- rare_grouping        : group low-frequency categories
+- one_hot              : optional (small cardinality only)
+
+REQ-3.2 All encoders must:
+- Handle missing categories explicitly.
+- Export mapping artifacts.
+- Be deterministic.
+
+REQ-3.3 Spark implementation may support subset but must fail explicitly if unsupported.
+
+------------------------------------------------------------
+4. Feature Metadata & Lineage (Governance)
+------------------------------------------------------------
+
+REQ-4.1 Maintain feature registry per run:
+
+registry[feature] = {
+  recipe_fields,
+  source_columns,
+  operation,
+  parameters,
+  window,
+  missing_strategy,
+  dependencies,
+  engine,
+  created_timestamp,
+  output_dtype
+}
+
+REQ-4.2 Provide exports:
+- export_registry_dict()
+- export_registry_json(path)
+
+REQ-4.3 Registry must support audit reproducibility.
+
+------------------------------------------------------------
+5. Feature Validation Hooks
+------------------------------------------------------------
+
+REQ-5.1 Implement:
+validate_features(df, feature_list=None, checks=None)
+
+REQ-5.2 Mandatory metrics:
+- missing_rate
+- unique_count
+- zero_variance_flag
+- min, max, mean, std
+- p01, p99
+
+REQ-5.3 Optional metrics:
+- correlation
+- PSI (if baseline provided)
+
+REQ-5.4 Support thresholds:
+- hard_fail thresholds
+- warning thresholds
+
+REQ-5.5 Export:
+- to_dataframe()
+- export_csv()
+- export_json()
+
+------------------------------------------------------------
+6. Feature Dependency Graph
+------------------------------------------------------------
+
+REQ-6.1 FeatureRecipe supports:
+- depends_on: List[str]
+
+REQ-6.2 Engine must:
+- Build dependency graph.
+- Topologically sort recipes.
+- Detect cycles and fail fast.
+- Validate missing dependencies.
+
+------------------------------------------------------------
+7. Spark Performance Optimizations
+------------------------------------------------------------
+
+REQ-7.1 Batch compatible aggregations when possible.
+
+REQ-7.2 Avoid repeated groupBy scans.
+
+REQ-7.3 Optional caching of intermediate Spark DataFrames.
+
+REQ-7.4 Avoid unnecessary shuffles and joins.
+
+REQ-7.5 Log execution timing per feature.
+
+------------------------------------------------------------
+8. Non-Functional Requirements
+------------------------------------------------------------
+
+NFR-1 Deterministic output given same data and config.
+NFR-2 Clear error messages with feature name and operation.
+NFR-3 Plug-in architecture for new operations (no giant if/else).
+NFR-4 Backward compatibility with existing recipes.
+
+------------------------------------------------------------
+9. Acceptance Criteria
+------------------------------------------------------------
+
+- Missing handling behaves consistently across engines.
+- Trend features validated numerically.
+- Categorical encoders deterministic and exportable.
+- Dependency graph resolves ordering correctly.
+- Registry export contains full lineage.
+- Validation report generated successfully.
+- Spark jobs show reduced redundant scans.

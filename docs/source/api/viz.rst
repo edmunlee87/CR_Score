@@ -121,6 +121,116 @@ Score Charts
 - **plot_ks_statistic**: KS curve showing maximum separation
 - **create_model_report**: Comprehensive multi-panel report
 
+Temporal Drift Visualization
+----------------------------
+
+Enhanced visualization capabilities for temporal drift analysis across multiple snapshots.
+
+Bin-Level Temporal Drift
+~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. code-block:: python
+
+   # Temporal bin drift with confidence bands
+   fig = visualizer.plot_temporal_bin_drift(
+       df,
+       feature_col="age_bin",
+       target_col="default",
+       snapshot_col="month_end",
+       snapshot_values=["2024-01", "2024-06", "2024-12"],
+       baseline_snapshot="2024-01",
+       show_confidence_bands=True
+   )
+   
+   # Delta vs baseline
+   fig = visualizer.plot_bin_delta_vs_baseline(
+       df,
+       feature_col="age_bin",
+       target_col="default",
+       snapshot_col="month_end",
+       baseline_snapshot="2024-01"
+   )
+
+Distribution Shift (PSI)
+~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. code-block:: python
+
+   # PSI by feature across snapshots
+   fig = visualizer.plot_psi_by_feature(
+       df,
+       feature_col="age",
+       snapshot_col="month_end",
+       baseline_snapshot="2024-01",
+       n_bins=10
+   )
+
+Score-Level Temporal Stability
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. code-block:: python
+
+   # Score distribution over time
+   fig = score_viz.plot_temporal_score_distribution(
+       df,
+       score_col="credit_score",
+       snapshot_col="month_end",
+       target_col="default",
+       snapshot_values=["2024-01", "2024-06", "2024-12"]
+   )
+   
+   # KS curve comparison
+   fig = score_viz.plot_temporal_ks_comparison(
+       df,
+       score_col="credit_score",
+       target_col="default",
+       snapshot_col="month_end"
+   )
+   
+   # Stability metrics dashboard
+   fig = score_viz.plot_temporal_stability_metrics(
+       df,
+       score_col="credit_score",
+       target_col="default",
+       snapshot_col="month_end",
+       approval_threshold=600
+   )
+
+Segmentation Support
+~~~~~~~~~~~~~~~~~~~~
+
+All temporal methods support segmentation:
+
+.. code-block:: python
+
+   fig = visualizer.plot_temporal_bin_drift(
+       df,
+       feature_col="age_bin",
+       target_col="default",
+       snapshot_col="month_end",
+       segment_col="product_type",
+       segment_values=["credit_card", "personal_loan"]
+   )
+
+Export with Metadata
+~~~~~~~~~~~~~~~~~~~~
+
+.. code-block:: python
+
+   metadata = {
+       "feature_name": "age_bin",
+       "model_id": "v2.1",
+       "snapshot_range": "2024-01 to 2024-12",
+       "baseline_snapshot": "2024-01",
+   }
+   
+   visualizer._export_figure_with_metadata(
+       fig,
+       path="reports/temporal_drift.html",
+       format="html",
+       metadata=metadata
+   )
+
 All Charts Features
 ~~~~~~~~~~~~~~~~~~~~
 
@@ -130,3 +240,6 @@ All Charts Features
 - Save as HTML, PNG, or SVG
 - Publication-ready styling
 - Responsive design
+- Temporal drift analysis across snapshots
+- PSI visualization for distribution shift
+- Score stability monitoring

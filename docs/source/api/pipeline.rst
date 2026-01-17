@@ -18,6 +18,11 @@ It automatically handles:
 - Intercept calibration
 - PDO scaling
 
+**Spark Support:**
+The pipeline now supports both pandas and Spark DataFrames. By default, it prefers Spark
+for large-scale processing. Spark DataFrames are automatically converted to pandas for
+binning/modeling stages (OptBinning requires pandas), then converted back for predictions.
+
 ScorecardPipeline
 -----------------
 
@@ -41,10 +46,11 @@ Basic Usage
        pdo=20,                # Every 20 points, odds double
        base_score=600,        # Score 600 = base odds
        base_odds=50.0,        # 2% default rate at base score
-       calibrate=True         # Calibrate intercept
+       calibrate=True,        # Calibrate intercept
+       prefer_spark=True      # Prefer Spark for large datasets (default)
    )
 
-   # Fit on training data
+   # Fit on training data (works with pandas or Spark DataFrame)
    pipeline.fit(df_train, target_col="default")
 
    # Predict scores
@@ -107,13 +113,18 @@ Fit the scorecard pipeline on training data.
 
 **Parameters:**
 
-- ``df`` (pd.DataFrame): Training data with features and target
+- ``df`` (Union[pd.DataFrame, SparkDataFrame]): Training data with features and target (pandas or Spark)
 - ``target_col`` (str): Name of target column
-- ``sample_weight`` (pd.Series, optional): Sample weights for compressed data
+- ``sample_weight`` (Union[pd.Series, SparkDataFrame], optional): Sample weights for compressed data
 
 **Returns:**
 
 - ``self``: Returns self for method chaining
+
+**Note:**
+- Automatically detects DataFrame type (pandas vs Spark)
+- Converts Spark to pandas for binning/modeling (OptBinning requires pandas)
+- Use ``prefer_spark=True`` (default) to prefer Spark for large datasets
 
 predict(df)
 ~~~~~~~~~~~
@@ -122,7 +133,7 @@ Predict credit scores for new data.
 
 **Parameters:**
 
-- ``df`` (pd.DataFrame): Feature data
+- ``df`` (Union[pd.DataFrame, SparkDataFrame]): Feature data (pandas or Spark)
 
 **Returns:**
 
@@ -148,7 +159,7 @@ Evaluate model performance on test data.
 
 **Parameters:**
 
-- ``df`` (pd.DataFrame): Test data with features and target
+- ``df`` (Union[pd.DataFrame, SparkDataFrame]): Test data with features and target (pandas or Spark)
 - ``target_col`` (str): Name of target column
 
 **Returns:**

@@ -1,0 +1,114 @@
+USER REQUIREMENT DOCUMENT (URD)
+Project: Scorecard SDK – Temporal Visualization Enhancements
+Module: visualization/bin_plots.py, visualization/score_plots.py
+Version: v1.0 (Temporal Drift Focus)
+
+Objective:
+Enhance visualization utilities to explicitly surface temporal behavior and characteristic shifts in portfolio data across periods for model development, validation, and monitoring.
+
+Scope:
+- Add time-awareness to existing bin and score plots.
+- Enable visual detection of distribution drift, event rate drift, and score stability.
+- Support both exploratory analysis and governance reporting.
+
+------------------------------------------------------------
+1. Temporal Dimension Support
+------------------------------------------------------------
+
+REQ-1.1 All plotting APIs must optionally accept:
+- snapshot_col: str        (e.g., "month_end", "reporting_date")
+- snapshot_values: list   (e.g., ["2024-12","2025-06"])
+- baseline_snapshot: str  (reference period)
+
+REQ-1.2 If snapshot_col is provided:
+- Functions must internally filter and aggregate per snapshot.
+- Charts must allow comparison across snapshots.
+
+------------------------------------------------------------
+2. Bin-Level Temporal Drift Visualization
+------------------------------------------------------------
+
+REQ-2.1 Extend bin plots to support:
+- Event rate per bin across multiple snapshots (multi-line plot).
+- Population % per bin across snapshots (stacked or grouped bars).
+- WoE per bin across snapshots (optional overlay).
+
+REQ-2.2 Provide delta view:
+- Δ event rate vs baseline per bin.
+- Δ population % vs baseline per bin.
+
+REQ-2.3 Optional confidence bands for event rate to highlight statistical noise.
+
+------------------------------------------------------------
+3. Distribution Shift Visualization
+------------------------------------------------------------
+
+REQ-3.1 Add distribution comparison plot:
+- Overlay histogram or bar distribution by bin across snapshots.
+- Display % change per bin.
+
+REQ-3.2 Provide PSI visualization:
+- PSI by feature across time.
+- PSI contribution by bin (stacked bars or waterfall).
+
+------------------------------------------------------------
+4. Score-Level Temporal Stability
+------------------------------------------------------------
+
+REQ-4.1 Extend score plots to support:
+- Score distribution by snapshot (overlay or facet).
+- KS curve comparison across snapshots.
+- Calibration curve comparison across snapshots.
+- Decile bad rate stability across snapshots.
+
+REQ-4.2 Provide stability metrics overlay:
+- Approval rate
+- Bad rate
+- Capture rate (top deciles)
+
+------------------------------------------------------------
+5. Segmentation Support
+------------------------------------------------------------
+
+REQ-5.1 All temporal plots must optionally accept:
+- segment_col: str
+- segment_values: list
+
+REQ-5.2 Support:
+- Faceted plots per segment
+- Dropdown filter for segment selection
+
+------------------------------------------------------------
+6. Export & Reporting
+------------------------------------------------------------
+
+REQ-6.1 All temporal plots must support:
+- export_html(path)
+- export_png(path)
+
+REQ-6.2 Embed metadata in export:
+- feature_name
+- model_id (if provided)
+- snapshot range
+- baseline_snapshot
+- segment (if applicable)
+
+------------------------------------------------------------
+7. Performance Considerations
+------------------------------------------------------------
+
+REQ-7.1 Aggregations must be vectorized and cached where possible.
+
+REQ-7.2 Avoid repeated recomputation for multi-snapshot comparisons.
+
+REQ-7.3 Limit bins rendered with configurable max_bins_display.
+
+------------------------------------------------------------
+8. Acceptance Criteria
+------------------------------------------------------------
+
+- User can visually detect characteristic shift across time.
+- Bin behavior drift is clearly visible.
+- Score stability across periods is easily interpretable.
+- Plots remain performant for multi-period datasets.
+- APIs remain backward compatible.

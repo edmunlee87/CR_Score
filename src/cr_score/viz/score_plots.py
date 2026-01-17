@@ -6,12 +6,15 @@ and model diagnostics using Plotly.
 """
 
 from typing import Any, Dict, List, Optional, Tuple
+import json
+from datetime import datetime
 
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
+import plotly.colors
 from plotly.subplots import make_subplots
-from sklearn.metrics import confusion_matrix, roc_curve
+from sklearn.metrics import confusion_matrix, roc_curve, auc
 
 from cr_score.core.logging import get_audit_logger
 
@@ -598,3 +601,412 @@ class ScoreVisualizer:
         )
 
         return fig
+    
+    # ========================================================================
+    # Temporal Stability Visualization Methods
+    # ========================================================================
+    
+    def plot_temporal_score_distribution(
+        self,
+        df: pd.DataFrame,
+        score_col: str,
+        snapshot_col: str,
+        snapshot_values: Optional[List] = None,
+        target_col: Optional[str] = None,
+        segment_col: Optional[str] = None,
+        segment_values: Optional[List] = None,
+        n_bins: int = 20,
+        title: Optional[str] = None,
+    ) -> go.Figure:
+        """
+        Plot score distribution across multiple snapshots.
+        
+        Args:
+            df: DataFrame with score and snapshot columns
+            score_col: Name of score column
+            snapshot_col: Name of snapshot/time column
+            snapshot_values: List of snapshots to include (None = all)
+            target_col: Optional target column for colored histograms
+            segment_col: Optional segmentation column
+            segment_values: List of segment values to filter (None = all)
+            n_bins: Number of histogram bins
+            title: Plot title
+            
+        Returns:
+            Plotly figure with score distributions over time
+            
+        Example:
+            >>> fig = visualizer.plot_temporal_score_distribution(
+            ...     df, "credit_score", "month_end",
+            ...     snapshot_values=["2024-01", "2024-06", "2024-12"]
+            ... )
+        """
+        # Filter data
+        if snapshot_values:
+            df = df[df[snapshot_col].isin(snapshot_values)]
+        if segment_col and segment_values:
+            df = df[df[segment_col].isin(segment_values)]
+        
+        snapshots = sorted(df[snapshot_col].dropna().unique())
+        colors = plotly.colors.qualitative.Set3[:len(snapshots)]
+        
+        fig = go.Figure()
+        
+        # Plot distribution for each snapshot
+        for i, snapshot in enumerate(snapshots):
+            df_snap = df[df[snapshot_col] == snapshot]
+            
+            if target_col:
+                # Separate by target class
+                scores_good = df_snap[df_snap[target_col] == 0][score_col].dropna()
+                scores_bad = df_snap[df_snap[target_col] == 1][score_col].dropna()
+                
+                if len(scores_good) > 0:
+                    fig.add_trace(
+                        go.Histogram(
+                            x=scores_good,
+                            nbinsx=n_bins,
+                            name=f"Good {snapshot}",
+                            marker_color=colors[i],
+                            opacity=0.6,
+                            legendgroup=f"good_{snapshot}",
+                        )
+                    )
+                
+                if len(scores_bad) > 0:
+                    fig.add_trace(
+                        go.Histogram(
+                            x=scores_bad,
+                            nbinsx=n_bins,
+                            name=f"Bad {snapshot}",
+                            marker_color=colors[i],
+                            opacity=0.8,
+                            legendgroup=f"bad_{snapshot}",
+                        )
+                    )
+            else:
+                scores = df_snap[score_col].dropna()
+                if len(scores) > 0:
+                    fig.add_trace(
+                        go.Histogram(
+                            x=scores,
+                            nbinsx=n_bins,
+                            name=str(snapshot),
+                            marker_color=colors[i],
+                            opacity=0.6,
+                        )
+                    )
+        
+        plot_title = title or "Score Distribution by Snapshot"
+        fig.update_layout(
+            title_text=plot_title,
+            xaxis_title="Credit Score",
+            yaxis_title="Count",
+            barmode="overlay",
+            template="plotly_white",
+            height=500,
+        )
+        
+        return fig
+    
+    def plot_temporal_ks_comparison(
+        self,
+        df: pd.DataFrame,
+        score_col: str,
+        target_col: str,
+        snapshot_col: str,
+        snapshot_values: Optional[List] = None,
+        segment_col: Optional[str] = None,
+        title: Optional[str] = None,
+    ) -> go.Figure:
+        """
+        Plot KS curve comparison across snapshots.
+        
+        Args:
+            df: DataFrame with score, target, and snapshot columns
+            score_col: Name of score column
+            target_col: Name of target column
+            snapshot_col: Name of snapshot/time column
+            snapshot_values: List of snapshots to include (None = all)
+            segment_col: Optional segmentation column
+            title: Plot title
+            
+        Returns:
+            Plotly figure with KS curves for each snapshot
+            
+        Example:
+            >>> fig = visualizer.plot_temporal_ks_comparison(
+            ...     df, "credit_score", "default", "month_end"
+            ... )
+        """
+        # Filter data
+        if snapshot_values:
+            df = df[df[snapshot_col].isin(snapshot_values)]
+        
+        snapshots = sorted(df[snapshot_col].dropna().unique())
+        colors = plotly.colors.qualitative.Set3[:len(snapshots)]
+        
+        fig = go.Figure()
+        
+        for i, snapshot in enumerate(snapshots):
+            df_snap = df[df[snapshot_col] == snapshot].copy()
+            scores = df_snap[score_col].dropna().values
+            targets = df_snap[target_col].dropna().values
+            
+            if len(scores) == 0 or len(targets) == 0:
+                continue
+            
+            # Sort by score
+            sorted_indices = np.argsort(scores)
+            y_sorted = targets[sorted_indices]
+            
+            n_total = len(targets)
+            n_bad = targets.sum()
+            n_good = n_total - n_bad
+            
+            if n_bad == 0 or n_good == 0:
+                continue
+            
+            cum_bad = np.cumsum(y_sorted) / n_bad
+            cum_good = np.cumsum(1 - y_sorted) / n_good
+            percentiles = np.arange(n_total) / n_total * 100
+            
+            # KS statistic
+            ks_values = cum_bad - cum_good
+            ks_max = np.max(ks_values)
+            
+            # Plot cumulative distributions
+            fig.add_trace(
+                go.Scatter(
+                    x=percentiles,
+                    y=cum_bad,
+                    mode='lines',
+                    name=f'Cum Bad % {snapshot}',
+                    line=dict(color=colors[i], width=2, dash='solid'),
+                    legendgroup=f"bad_{snapshot}",
+                )
+            )
+            
+            fig.add_trace(
+                go.Scatter(
+                    x=percentiles,
+                    y=cum_good,
+                    mode='lines',
+                    name=f'Cum Good % {snapshot}',
+                    line=dict(color=colors[i], width=2, dash='dot'),
+                    legendgroup=f"good_{snapshot}",
+                )
+            )
+            
+            # Add KS annotation
+            ks_idx = np.argmax(ks_values)
+            fig.add_annotation(
+                x=percentiles[ks_idx],
+                y=(cum_good[ks_idx] + cum_bad[ks_idx]) / 2,
+                text=f"KS={ks_max:.3f}",
+                showarrow=True,
+                arrowhead=2,
+                bgcolor="white",
+                font=dict(size=9),
+            )
+        
+        plot_title = title or "KS Curve Comparison by Snapshot"
+        fig.update_layout(
+            title_text=plot_title,
+            xaxis_title="Population %",
+            yaxis_title="Cumulative %",
+            template="plotly_white",
+            height=500,
+        )
+        
+        return fig
+    
+    def plot_temporal_stability_metrics(
+        self,
+        df: pd.DataFrame,
+        score_col: str,
+        target_col: str,
+        snapshot_col: str,
+        snapshot_values: Optional[List] = None,
+        approval_threshold: Optional[float] = None,
+        segment_col: Optional[str] = None,
+        title: Optional[str] = None,
+    ) -> go.Figure:
+        """
+        Plot stability metrics (approval rate, bad rate, capture rate) over time.
+        
+        Args:
+            df: DataFrame with score, target, and snapshot columns
+            score_col: Name of score column
+            target_col: Name of target column
+            snapshot_col: Name of snapshot/time column
+            snapshot_values: List of snapshots to include (None = all)
+            approval_threshold: Score threshold for approval rate calculation
+            segment_col: Optional segmentation column
+            title: Plot title
+            
+        Returns:
+            Plotly figure with stability metrics over time
+            
+        Example:
+            >>> fig = visualizer.plot_temporal_stability_metrics(
+            ...     df, "credit_score", "default", "month_end",
+            ...     approval_threshold=600
+            ... )
+        """
+        # Filter data
+        if snapshot_values:
+            df = df[df[snapshot_col].isin(snapshot_values)]
+        
+        snapshots = sorted(df[snapshot_col].dropna().unique())
+        
+        metrics = {
+            'snapshot': [],
+            'approval_rate': [],
+            'bad_rate': [],
+            'capture_rate_top_decile': [],
+            'capture_rate_top_quintile': [],
+        }
+        
+        for snapshot in snapshots:
+            df_snap = df[df[snapshot_col] == snapshot].copy()
+            
+            if len(df_snap) == 0:
+                continue
+            
+            # Bad rate
+            bad_rate = df_snap[target_col].mean() if target_col in df_snap.columns else None
+            
+            # Approval rate (if threshold provided)
+            if approval_threshold:
+                approval_rate = (df_snap[score_col] >= approval_threshold).mean()
+            else:
+                approval_rate = None
+            
+            # Capture rate (top decile/quintile)
+            if target_col in df_snap.columns:
+                df_snap_sorted = df_snap.sort_values(score_col, ascending=False)
+                n_top_decile = max(1, len(df_snap) // 10)
+                n_top_quintile = max(1, len(df_snap) // 5)
+                
+                total_bad = df_snap[target_col].sum()
+                if total_bad > 0:
+                    capture_top_decile = df_snap_sorted.head(n_top_decile)[target_col].sum() / total_bad
+                    capture_top_quintile = df_snap_sorted.head(n_top_quintile)[target_col].sum() / total_bad
+                else:
+                    capture_top_decile = capture_top_quintile = None
+            else:
+                capture_top_decile = capture_top_quintile = None
+            
+            metrics['snapshot'].append(str(snapshot))
+            metrics['approval_rate'].append(approval_rate)
+            metrics['bad_rate'].append(bad_rate)
+            metrics['capture_rate_top_decile'].append(capture_top_decile)
+            metrics['capture_rate_top_quintile'].append(capture_top_quintile)
+        
+        # Create subplots
+        fig = make_subplots(
+            rows=2, cols=2,
+            subplot_titles=("Approval Rate", "Bad Rate", "Capture Rate (Top Decile)", "Capture Rate (Top Quintile)"),
+            vertical_spacing=0.15,
+        )
+        
+        # Plot each metric
+        if any(m is not None for m in metrics['approval_rate']):
+            fig.add_trace(
+                go.Scatter(
+                    x=metrics['snapshot'],
+                    y=metrics['approval_rate'],
+                    mode='lines+markers',
+                    name='Approval Rate',
+                    line=dict(color='blue', width=2),
+                ),
+                row=1, col=1,
+            )
+        
+        if any(m is not None for m in metrics['bad_rate']):
+            fig.add_trace(
+                go.Scatter(
+                    x=metrics['snapshot'],
+                    y=metrics['bad_rate'],
+                    mode='lines+markers',
+                    name='Bad Rate',
+                    line=dict(color='red', width=2),
+                ),
+                row=1, col=2,
+            )
+        
+        if any(m is not None for m in metrics['capture_rate_top_decile']):
+            fig.add_trace(
+                go.Scatter(
+                    x=metrics['snapshot'],
+                    y=metrics['capture_rate_top_decile'],
+                    mode='lines+markers',
+                    name='Capture (Top 10%)',
+                    line=dict(color='green', width=2),
+                ),
+                row=2, col=1,
+            )
+        
+        if any(m is not None for m in metrics['capture_rate_top_quintile']):
+            fig.add_trace(
+                go.Scatter(
+                    x=metrics['snapshot'],
+                    y=metrics['capture_rate_top_quintile'],
+                    mode='lines+markers',
+                    name='Capture (Top 20%)',
+                    line=dict(color='orange', width=2),
+                ),
+                row=2, col=2,
+            )
+        
+        plot_title = title or "Score Stability Metrics by Snapshot"
+        fig.update_layout(
+            title_text=plot_title,
+            height=700,
+            template="plotly_white",
+            showlegend=False,
+        )
+        
+        fig.update_xaxes(title_text="Snapshot", row=2, col=1)
+        fig.update_xaxes(title_text="Snapshot", row=2, col=2)
+        
+        return fig
+    
+    def _export_figure_with_metadata(
+        self,
+        fig: go.Figure,
+        path: str,
+        format: str = "html",
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        """
+        Export figure with embedded metadata.
+        
+        Args:
+            fig: Plotly figure
+            path: Export path
+            format: Export format ("html" or "png")
+            metadata: Dictionary of metadata to embed
+        """
+        if metadata:
+            metadata_text = "<br>".join([f"<b>{k}:</b> {v}" for k, v in metadata.items()])
+            fig.add_annotation(
+                xref="paper", yref="paper",
+                x=0.02, y=-0.1,
+                xanchor="left", yanchor="top",
+                text=metadata_text,
+                showarrow=False,
+                font=dict(size=10, color="gray"),
+            )
+            
+            fig.update_layout(margin=dict(b=100))
+        
+        if format == "html":
+            fig.write_html(path)
+        elif format == "png":
+            fig.write_image(path, width=1200, height=800, scale=2)
+        else:
+            raise ValueError(f"Unsupported format: {format}")
+        
+        self.logger.info(f"Exported figure to {path}", metadata=metadata)

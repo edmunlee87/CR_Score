@@ -620,9 +620,195 @@ Add annotations to explain what charts mean:
        font=dict(size=12)
    )
 
+Temporal Drift Visualization
+----------------------------
+
+Monitor how your features and scores change over time across multiple snapshots.
+
+Why Temporal Visualization?
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Temporal visualizations help you:
+
+- **Detect Drift**: Identify when feature distributions shift
+- **Monitor Stability**: Ensure model performance remains consistent
+- **Validate Changes**: Compare current vs historical behavior
+- **Compliance**: Track changes over time for regulatory reporting
+
+Bin-Level Temporal Drift
+~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Analyze how bin behavior changes across snapshots:
+
+.. code-block:: python
+
+   from cr_score.viz import BinningVisualizer
+
+   viz = BinningVisualizer()
+
+   # Plot temporal drift with confidence bands
+   fig = viz.plot_temporal_bin_drift(
+       df,
+       feature_col="age_bin",
+       target_col="default",
+       snapshot_col="month_end",
+       snapshot_values=["2024-01", "2024-06", "2024-12"],
+       baseline_snapshot="2024-01",
+       show_confidence_bands=True
+   )
+   fig.show()
+
+**What you see:**
+
+- **Top Panel**: Event rate per bin across snapshots (multi-line plot)
+- **Bottom Panel**: Population % per bin across snapshots (stacked bars)
+- **Confidence Bands**: Statistical uncertainty around event rates
+
+Delta vs Baseline
+~~~~~~~~~~~~~~~~~
+
+See how bins change relative to a baseline period:
+
+.. code-block:: python
+
+   # Plot delta (change) vs baseline
+   fig = viz.plot_bin_delta_vs_baseline(
+       df,
+       feature_col="age_bin",
+       target_col="default",
+       snapshot_col="month_end",
+       baseline_snapshot="2024-01"
+   )
+   fig.show()
+
+**What you see:**
+
+- **Left Panel**: Δ Event Rate vs baseline per bin
+- **Right Panel**: Δ Population % vs baseline per bin
+- **Zero Line**: Reference for no change
+
+PSI Visualization
+~~~~~~~~~~~~~~~~~
+
+Track distribution shift using Population Stability Index:
+
+.. code-block:: python
+
+   # Plot PSI over time
+   fig = viz.plot_psi_by_feature(
+       df,
+       feature_col="age",
+       snapshot_col="month_end",
+       baseline_snapshot="2024-01",
+       n_bins=10
+   )
+   fig.show()
+
+**PSI Interpretation:**
+
+- **PSI < 0.10**: Low drift (acceptable)
+- **PSI 0.10-0.25**: Medium drift (monitor closely)
+- **PSI > 0.25**: High drift (action required)
+
+Score Stability Monitoring
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Monitor score distribution and stability metrics:
+
+.. code-block:: python
+
+   from cr_score.viz import ScoreVisualizer
+
+   score_viz = ScoreVisualizer()
+
+   # Score distribution over time
+   fig = score_viz.plot_temporal_score_distribution(
+       df,
+       score_col="credit_score",
+       snapshot_col="month_end",
+       target_col="default",
+       snapshot_values=["2024-01", "2024-06", "2024-12"]
+   )
+   fig.show()
+
+   # KS curve comparison
+   fig = score_viz.plot_temporal_ks_comparison(
+       df,
+       score_col="credit_score",
+       target_col="default",
+       snapshot_col="month_end"
+   )
+   fig.show()
+
+   # Stability metrics dashboard
+   fig = score_viz.plot_temporal_stability_metrics(
+       df,
+       score_col="credit_score",
+       target_col="default",
+       snapshot_col="month_end",
+       approval_threshold=600
+   )
+   fig.show()
+
+**Stability Metrics Dashboard shows:**
+
+- **Approval Rate**: % of applications approved over time
+- **Bad Rate**: Default rate over time
+- **Capture Rate (Top 10%)**: % of defaults captured in top decile
+- **Capture Rate (Top 20%)**: % of defaults captured in top quintile
+
+Segmentation Support
+~~~~~~~~~~~~~~~~~~~~
+
+Analyze temporal drift by segment:
+
+.. code-block:: python
+
+   fig = viz.plot_temporal_bin_drift(
+       df,
+       feature_col="age_bin",
+       target_col="default",
+       snapshot_col="month_end",
+       segment_col="product_type",
+       segment_values=["credit_card", "personal_loan"]
+   )
+   fig.show()
+
+Export with Metadata
+~~~~~~~~~~~~~~~~~~~~
+
+Export temporal visualizations with audit metadata:
+
+.. code-block:: python
+
+   metadata = {
+       "feature_name": "age_bin",
+       "model_id": "v2.1",
+       "snapshot_range": "2024-01 to 2024-12",
+       "baseline_snapshot": "2024-01",
+       "segment": "consumer_portfolio"
+   }
+
+   viz._export_figure_with_metadata(
+       fig,
+       path="reports/temporal_drift_age_bin.html",
+       format="html",
+       metadata=metadata
+   )
+
+Metadata is embedded in the visualization for audit trails.
+
+See Also
+~~~~~~~~
+
+- :doc:`/api/viz` - Complete API reference including temporal methods
+- :doc:`/guides/enhanced_features` - Feature engineering for temporal features
+- :doc:`/playbooks/09_temporal_visualization` - Interactive tutorial
+
 Next Steps
 ----------
 
 - :doc:`/api/viz` - Complete API reference
 - :doc:`/guides/reporting` - Generate HTML reports
+- :doc:`/guides/enhanced_features` - Advanced feature engineering
 - :doc:`/examples/complete_workflow` - See visualizations in action

@@ -4,7 +4,7 @@ High-level scorecard pipeline for simplified workflows.
 Provides a scikit-learn-like interface for complete scorecard development.
 """
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 
 import pandas as pd
 import numpy as np
@@ -15,6 +15,13 @@ from cr_score.calibration import InterceptCalibrator
 from cr_score.scaling import PDOScaler
 from cr_score.features.selection import ForwardSelector, BackwardSelector, StepwiseSelector
 from cr_score.core.logging import get_audit_logger
+
+try:
+    from pyspark.sql import DataFrame as SparkDataFrame
+    PYSPARK_AVAILABLE = True
+except ImportError:
+    PYSPARK_AVAILABLE = False
+    SparkDataFrame = None
 
 
 class ScorecardPipeline:
@@ -53,6 +60,8 @@ class ScorecardPipeline:
         feature_selection: Optional[str] = None,
         max_features: Optional[int] = None,
         random_state: int = 42,
+        engine: Optional[str] = None,  # None = auto-detect
+        prefer_spark: bool = True,  # Prefer Spark for large datasets
     ) -> None:
         """
         Initialize scorecard pipeline.
@@ -68,6 +77,8 @@ class ScorecardPipeline:
             feature_selection: Selection method (None, "forward", "backward", "stepwise")
             max_features: Maximum features to select (None = no limit)
             random_state: Random seed
+            engine: Explicit engine ("pandas" or "spark"), None for auto-detection
+            prefer_spark: If True, prefer Spark even for pandas DataFrames (default: True)
 
         Example:
             >>> pipeline = ScorecardPipeline(
@@ -86,6 +97,8 @@ class ScorecardPipeline:
         self.feature_selection = feature_selection
         self.max_features = max_features
         self.random_state = random_state
+        self.engine = engine
+        self.prefer_spark = prefer_spark
         self.logger = get_audit_logger()
 
         # Components
@@ -100,13 +113,15 @@ class ScorecardPipeline:
         self.feature_cols_: Optional[List[str]] = None
         self.selected_features_: Optional[List[str]] = None
         self.is_fitted_: bool = False
+        self.engine_: Optional[str] = None  # Detected engine
+        self._input_is_spark: bool = False  # Track if input was Spark DataFrame
 
     def fit(
         self,
-        df: pd.DataFrame,
+        df: Union[pd.DataFrame, "SparkDataFrame"],
         target_col: str,
         feature_cols: Optional[List[str]] = None,
-        sample_weight: Optional[pd.Series] = None,
+        sample_weight: Optional[Union[pd.Series, "SparkDataFrame"]] = None,
     ) -> "ScorecardPipeline":
         """
         Fit complete scorecard pipeline.
@@ -114,7 +129,7 @@ class ScorecardPipeline:
         Performs: Auto-binning → WoE encoding → Logistic regression → Calibration → Scaling
 
         Args:
-            df: Training DataFrame
+            df: Training DataFrame (pandas or Spark)
             target_col: Target variable column
             feature_cols: Features to use (None = all except target)
             sample_weight: Sample weights (for compressed data)
@@ -130,10 +145,44 @@ class ScorecardPipeline:
         self.logger.info("Starting CR_Score Pipeline")
         self.logger.info("=" * 80)
 
+        # Detect engine
+        if isinstance(df, SparkDataFrame):
+            self.engine_ = "spark"
+            self._input_is_spark = True
+            self.logger.info("Detected Spark DataFrame")
+        elif self.engine:
+            self.engine_ = self.engine
+            self._input_is_spark = False
+            self.logger.info(f"Using explicit engine: {self.engine_}")
+        elif self.prefer_spark and PYSPARK_AVAILABLE:
+            # Convert to Spark for large datasets
+            from pyspark.sql import SparkSession
+            spark = SparkSession.getActiveSession()
+            if spark is None:
+                spark = SparkSession.builder.appName("CR_Score_Pipeline").getOrCreate()
+            df = spark.createDataFrame(df)
+            self.engine_ = "spark"
+            self._input_is_spark = True
+            self.logger.info("Converted pandas DataFrame to Spark (prefer_spark=True)")
+        else:
+            self.engine_ = "pandas"
+            self._input_is_spark = False
+            self.logger.info("Using pandas engine")
+
+        # Convert Spark DataFrame to pandas for binning/modeling
+        # (OptBinning and sklearn models require pandas)
+        if self.engine_ == "spark":
+            self.logger.info("Converting Spark DataFrame to pandas for binning/modeling...")
+            df_pandas = df.toPandas()
+            if sample_weight is not None and isinstance(sample_weight, SparkDataFrame):
+                sample_weight = sample_weight.toPandas()
+        else:
+            df_pandas = df
+
         self.target_col_ = target_col
 
         if feature_cols is None:
-            feature_cols = [col for col in df.columns if col != target_col]
+            feature_cols = [col for col in df_pandas.columns if col != target_col]
 
         self.feature_cols_ = feature_cols
 
@@ -144,7 +193,7 @@ class ScorecardPipeline:
             min_iv=self.min_iv,
         )
 
-        _, df_woe = self.auto_binner_.fit_transform(df, target_col, feature_cols)
+        _, df_woe = self.auto_binner_.fit_transform(df_pandas, target_col, feature_cols)
 
         selected_features = self.auto_binner_.get_selected_features()
         iv_summary = self.auto_binner_.get_iv_summary()
@@ -193,7 +242,7 @@ class ScorecardPipeline:
                 self.feature_selector_ = None
 
             if self.feature_selector_:
-                self.feature_selector_.fit(df_woe[woe_features], df[target_col])
+                self.feature_selector_.fit(df_woe[woe_features], df_pandas[target_col])
                 woe_features = self.feature_selector_.get_selected_features()
 
                 # Map back to original features
@@ -214,7 +263,7 @@ class ScorecardPipeline:
         self.model_ = LogisticScorecard(random_state=self.random_state)
 
         X_woe = df_woe[woe_features]
-        y = df[target_col]
+        y = df_pandas[target_col]
 
         self.model_.fit(X_woe, y, sample_weight=sample_weight)
 
@@ -260,12 +309,12 @@ class ScorecardPipeline:
 
         return self
 
-    def predict(self, df: pd.DataFrame) -> np.ndarray:
+    def predict(self, df: Union[pd.DataFrame, "SparkDataFrame"]) -> np.ndarray:
         """
         Predict credit scores.
 
         Args:
-            df: DataFrame with features
+            df: DataFrame with features (pandas or Spark)
 
         Returns:
             Array of credit scores
@@ -276,6 +325,10 @@ class ScorecardPipeline:
         """
         if not self.is_fitted_:
             raise ValueError("Pipeline not fitted. Call fit() first.")
+
+        # Convert Spark to pandas if needed
+        if isinstance(df, SparkDataFrame):
+            df = df.toPandas()
 
         # Transform to WoE
         df_woe = self.auto_binner_.transform_woe(df)
@@ -296,12 +349,12 @@ class ScorecardPipeline:
 
         return scores
 
-    def predict_proba(self, df: pd.DataFrame) -> np.ndarray:
+    def predict_proba(self, df: Union[pd.DataFrame, "SparkDataFrame"]) -> np.ndarray:
         """
         Predict default probabilities.
 
         Args:
-            df: DataFrame with features
+            df: DataFrame with features (pandas or Spark)
 
         Returns:
             Array of default probabilities
@@ -312,6 +365,10 @@ class ScorecardPipeline:
         """
         if not self.is_fitted_:
             raise ValueError("Pipeline not fitted. Call fit() first.")
+
+        # Convert Spark to pandas if needed
+        if isinstance(df, SparkDataFrame):
+            df = df.toPandas()
 
         # Transform to WoE
         df_woe = self.auto_binner_.transform_woe(df)
@@ -331,14 +388,14 @@ class ScorecardPipeline:
 
     def evaluate(
         self,
-        df: pd.DataFrame,
+        df: Union[pd.DataFrame, "SparkDataFrame"],
         target_col: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Evaluate pipeline on test set.
 
         Args:
-            df: Test DataFrame
+            df: Test DataFrame (pandas or Spark)
             target_col: Target column (None = use training target)
 
         Returns:
@@ -353,6 +410,10 @@ class ScorecardPipeline:
 
         if target_col is None:
             target_col = self.target_col_
+
+        # Convert Spark to pandas if needed
+        if isinstance(df, SparkDataFrame):
+            df = df.toPandas()
 
         # Predict
         probas = self.predict_proba(df)
